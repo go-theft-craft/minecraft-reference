@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -80,5 +81,54 @@ func TestReadmeSupportedVersionsMatchTrackedCatalog(t *testing.T) {
 	}
 	if err := catalog.CheckREADME(readme, versions); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestVersionUpdaterWorkflowIsSafe(t *testing.T) {
+	repository := filepath.Join("..", "..")
+	path := filepath.Join(repository, ".github", "workflows", "update-minecraft-versions.yml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflow := string(data)
+
+	if !strings.Contains(workflow, "permissions:\n  contents: read\n") {
+		t.Error("updater workflow must default to read-only repository contents")
+	}
+	for _, forbidden := range []string{
+		"pull_request_target:",
+		"secrets.",
+		"task release",
+		"goreleaser release",
+		"gh release",
+	} {
+		if strings.Contains(workflow, forbidden) {
+			t.Errorf("updater workflow contains forbidden text %q", forbidden)
+		}
+	}
+	if !strings.Contains(workflow, "GH_TOKEN: ${{ github.token }}") {
+		t.Error("updater workflow must pass the GitHub token to gh through GH_TOKEN")
+	}
+	for lineNumber, line := range strings.Split(workflow, "\n") {
+		if strings.Contains(line, "github.token") && strings.TrimSpace(line) != "GH_TOKEN: ${{ github.token }}" {
+			t.Errorf("GitHub token appears outside the GH_TOKEN environment at line %d", lineNumber+1)
+		}
+	}
+
+	pinnedAction := regexp.MustCompile(`^[0-9a-f]{40}(?:\s+#.*)?$`)
+	for lineNumber, line := range strings.Split(workflow, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "uses:") && !strings.HasPrefix(trimmed, "- uses:") {
+			continue
+		}
+		reference, found := strings.CutPrefix(trimmed, "- ")
+		if found {
+			trimmed = reference
+		}
+		_, version, found := strings.Cut(trimmed, "@")
+		if !found || !pinnedAction.MatchString(version) {
+			t.Errorf("workflow action is not SHA-pinned at line %d: %s", lineNumber+1, strings.TrimSpace(line))
+		}
 	}
 }

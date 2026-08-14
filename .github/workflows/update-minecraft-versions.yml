@@ -1,0 +1,313 @@
+name: Update Minecraft versions
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  STAGING_BRANCH: automation/minecraft-versions-staging
+  UPDATE_BRANCH: automation/minecraft-versions
+
+jobs:
+  discovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      has_candidates: ${{ steps.candidates.outputs.has_candidates }}
+      matrix: ${{ steps.candidates.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+
+      - name: Verify main
+        run: devbox run -- task verify
+
+      - name: Discover stable family updates
+        id: candidates
+        run: |
+          devbox run -- task versions:discover OUTPUT=candidate.json
+          if devbox run -- jq -e '.candidates | length > 0' candidate.json >/dev/null; then
+            matrix="$(devbox run -- task --silent versions:matrix CONFIG=candidate.json)"
+            printf 'has_candidates=true\n' >> "$GITHUB_OUTPUT"
+            printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
+          else
+            printf 'has_candidates=false\n' >> "$GITHUB_OUTPUT"
+            printf 'matrix={"include":[]}\n' >> "$GITHUB_OUTPUT"
+            printf 'No stable family updates\n' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload candidate configuration
+        if: steps.candidates.outputs.has_candidates == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: minecraft-version-candidate
+          path: candidate.json
+          if-no-files-found: error
+          retention-days: 7
+
+  test_candidates:
+    needs: discovery
+    if: needs.discovery.outputs.has_candidates == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discovery.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+
+      - name: Download candidate configuration
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: minecraft-version-candidate
+
+      - name: Create candidate configuration directory
+        id: config
+        run: |
+          config_dir="$RUNNER_TEMP/mcreference-config"
+          mkdir -p "$config_dir"
+          install -m 0600 candidate.json "$config_dir/versions.json"
+          install -m 0600 internal/reference/config/defaults/tools.json "$config_dir/tools.json"
+          printf 'directory=%s\n' "$config_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Java ${{ matrix.java }}
+        id: java
+        continue-on-error: true
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+
+      - name: Report unavailable JDK
+        if: steps.java.outcome == 'failure'
+        env:
+          VERSION: ${{ matrix.version }}
+          MAJOR: ${{ matrix.java }}
+        run: |
+          printf 'Minecraft %s requires Java %s, but the configured JDK distribution does not provide it. Add that JDK before advertising this release.\n' "$VERSION" "$MAJOR" | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+
+      - name: Test candidate
+        env:
+          VERSION: ${{ matrix.version }}
+          SIDE: ${{ matrix.side }}
+          CONFIG_DIR: ${{ steps.config.outputs.directory }}
+        run: >-
+          devbox run -- task compatibility
+          VERSIONS="$VERSION"
+          SIDES="$SIDE"
+          JAVA="$JAVA_HOME/bin/java"
+          JAVAP="$JAVA_HOME/bin/javap"
+          CONFIG_DIR="$CONFIG_DIR"
+
+      - name: Upload candidate report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: candidate-report-${{ matrix.version }}-${{ matrix.side }}
+          path: reference/work/versions/${{ matrix.version }}/${{ matrix.side }}/compatibility.json
+          if-no-files-found: error
+          retention-days: 7
+
+  acceptance:
+    needs: [discovery, test_candidates]
+    if: needs.discovery.outputs.has_candidates == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      actions: write
+      checks: read
+      contents: write
+    outputs:
+      staging_sha: ${{ steps.commit.outputs.sha }}
+      compatibility_url: ${{ steps.compatibility.outputs.url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download candidate configuration
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: minecraft-version-candidate
+
+      - name: Download candidate reports
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: candidate-report-*
+          path: candidate-reports
+
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+
+      - name: Accept candidate reports
+        run: >-
+          devbox run -- task versions:accept
+          CONFIG=candidate.json
+          REPORTS=candidate-reports
+          OUTPUT=internal/reference/config/defaults/versions.json
+
+      - name: Regenerate README
+        run: >-
+          devbox run -- task versions:readme
+          CONFIG=internal/reference/config/defaults/versions.json
+          FILE=README.md
+
+      - name: Verify accepted catalog
+        run: devbox run -- task verify
+
+      - name: Commit and push staging catalog
+        id: commit
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -- README.md internal/reference/config/defaults/versions.json
+          if git diff --cached --quiet; then
+            printf 'Candidate acceptance produced no generated catalog changes.\n' | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          unexpected="$(git diff --cached --name-only -- . ':(exclude)README.md' ':(exclude)internal/reference/config/defaults/versions.json')"
+          if [ -n "$unexpected" ]; then
+            printf 'Refusing to commit unexpected files:\n%s\n' "$unexpected" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          git commit -m "chore: update Minecraft version catalog"
+          staging_sha="$(git rev-parse HEAD)"
+          expected="$(git ls-remote --heads origin "refs/heads/$STAGING_BRANCH" | cut -f1)"
+          git push --force-with-lease="refs/heads/$STAGING_BRANCH:$expected" origin "HEAD:refs/heads/$STAGING_BRANCH"
+          printf 'sha=%s\n' "$staging_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch compatibility workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run compatibility.yml --ref "$STAGING_BRANCH"
+
+      - name: Wait for compatibility workflow
+        id: compatibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          set -euo pipefail
+          run_id=""
+          run_url=""
+          for _ in $(seq 1 30); do
+            run_id="$(gh run list --workflow compatibility.yml --branch "$STAGING_BRANCH" --event workflow_dispatch --commit "$STAGING_SHA" --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+            run_url="$(gh run list --workflow compatibility.yml --branch "$STAGING_BRANCH" --event workflow_dispatch --commit "$STAGING_SHA" --limit 1 --json url --jq '.[0].url // empty')"
+            if [ -n "$run_id" ] && [ -n "$run_url" ]; then
+              break
+            fi
+            sleep 2
+          done
+          if [ -z "$run_id" ] || [ -z "$run_url" ]; then
+            printf 'Could not find the dispatched Compatibility run for commit %s.\n' "$STAGING_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          printf 'Watching Compatibility run: %s\n' "$run_url" >> "$GITHUB_STEP_SUMMARY"
+          gh run watch "$run_id" --exit-status
+          printf 'url=%s\n' "$run_url" >> "$GITHUB_OUTPUT"
+
+      - name: Build pull request body
+        env:
+          COMPATIBILITY_URL: ${{ steps.compatibility.outputs.url }}
+        run: |
+          set -euo pipefail
+          reports_json="$RUNNER_TEMP/candidate-reports.json"
+          body_path="$RUNNER_TEMP/pr-body.md"
+          find candidate-reports -type f -name compatibility.json -print0 | sort -z | xargs -0 jq -s '.' > "$reports_json"
+          {
+            printf '## Stable family updates\n\n'
+            printf '| Family | Old version | New version | Java major | Naming | Measured sources | Measured symbols |\n'
+            printf '|---|---|---|---:|---|---|---|\n'
+            jq -r --slurpfile reports "$reports_json" '
+              .candidates[] as $candidate
+              | ($reports[0] | map(select(.version == $candidate.new.id)) | sort_by(.side)) as $measured
+              | [
+                  $candidate.family,
+                  ($candidate.old.id // "new family"),
+                  $candidate.new.id,
+                  ((($candidate.old.java // "n/a") | tostring) + " -> " + ($candidate.new.java | tostring)),
+                  (($candidate.old.naming // "n/a") + " -> " + $candidate.new.naming),
+                  ($measured | map("\(.side): \(.source_records)") | join("<br>")),
+                  ($measured | map("\(.side): \(.symbol_records)") | join("<br>"))
+                ]
+              | "| " + join(" | ") + " |"
+            ' candidate.json
+            printf '\n## Validation\n\n'
+            printf -- '- Updater workflow: %s/%s/actions/runs/%s\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+            printf -- '- Compatibility workflow: %s\n' "$COMPATIBILITY_URL"
+          } > "$body_path"
+
+      - name: Upload promotion metadata
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: minecraft-version-promotion
+          path: ${{ runner.temp }}/pr-body.md
+          if-no-files-found: error
+          retention-days: 7
+
+  promote:
+    needs: acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.acceptance.outputs.staging_sha }}
+          fetch-depth: 0
+
+      - name: Download pull request body
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: minecraft-version-promotion
+          path: ${{ runner.temp }}/promotion
+
+      - name: Promote tested commit
+        run: |
+          set -euo pipefail
+          expected="$(git ls-remote --heads origin "refs/heads/$UPDATE_BRANCH" | cut -f1)"
+          git push --force-with-lease="refs/heads/$UPDATE_BRANCH:$expected" origin "HEAD:refs/heads/$UPDATE_BRANCH"
+
+      - name: Create or update pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          body_path="$RUNNER_TEMP/promotion/pr-body.md"
+          pr_number="$(gh pr list --head "$UPDATE_BRANCH" --base main --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$pr_number" ]; then
+            gh pr edit "$pr_number" --title "chore: update Minecraft version catalog" --body-file "$body_path"
+            exit 0
+          fi
+          error_path="$RUNNER_TEMP/pr-create-error.txt"
+          if gh pr create --base main --head "$UPDATE_BRANCH" --title "chore: update Minecraft version catalog" --body-file "$body_path" 2>"$error_path"; then
+            exit 0
+          fi
+          error="$(cat "$error_path")"
+          printf '%s\n' "$error" >&2
+          if printf '%s\n' "$error" | grep -Fqi 'GitHub Actions is not permitted to create or approve pull requests'; then
+            printf 'Enable "Allow GitHub Actions to create and approve pull requests" in the repository Actions settings.\n' | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 1

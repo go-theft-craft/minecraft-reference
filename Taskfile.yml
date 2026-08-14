@@ -112,10 +112,38 @@ tasks:
     cmds:
       - go run ./cmd/mcversionupdate readme --config internal/reference/config/defaults/versions.json --file README.md --check
 
+  versions:discover:
+    desc: Discover changed stable family representatives
+    vars:
+      OUTPUT: '{{.OUTPUT | default "candidate.json"}}'
+    cmds:
+      - go run ./cmd/mcversionupdate discover --output '{{.OUTPUT}}'
+
   versions:matrix:
     desc: Print the configured compatibility matrix
+    vars:
+      CONFIG: '{{.CONFIG | default "internal/reference/config/defaults/versions.json"}}'
     cmds:
-      - go run ./cmd/mcversionupdate matrix --config internal/reference/config/defaults/versions.json
+      - go run ./cmd/mcversionupdate matrix --config '{{.CONFIG}}'
+
+  versions:accept:
+    desc: Accept passing compatibility reports into a version catalog
+    requires:
+      vars: [CONFIG, REPORTS, OUTPUT]
+    cmds:
+      - >-
+        go run ./cmd/mcversionupdate accept
+        --config '{{.CONFIG}}'
+        --reports '{{.REPORTS}}'
+        --output '{{.OUTPUT}}'
+
+  versions:readme:
+    desc: Regenerate the supported Minecraft versions table
+    vars:
+      CONFIG: '{{.CONFIG | default "internal/reference/config/defaults/versions.json"}}'
+      FILE: '{{.FILE | default "README.md"}}'
+    cmds:
+      - go run ./cmd/mcversionupdate readme --config '{{.CONFIG}}' --file '{{.FILE}}' --write
 
   compatibility:
     desc: Prepare compatibility evidence for selected Minecraft versions

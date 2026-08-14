@@ -5,6 +5,14 @@ version manifest:
 
 <https://piston-meta.mojang.com/mc/game/version_manifest_v2.json>
 
+Mojang's per-version metadata supplies the artifact URLs, SHA-1 values, Java
+major, and official client and server mapping URLs. Releases without official
+mappings keep identity names. Legacy releases use the MCP sources listed in
+`internal/reference/config/defaults/tools.json`: the [MCP Archive snapshot at
+commit `7e368b355f507d62085497195cfd4c79e532c450`](https://github.com/GrylaMC/MCP_Archive/tree/7e368b355f507d62085497195cfd4c79e532c450),
+and the pinned MCP and MCP stable exports hosted by
+[`mcp.zeith.org`](https://mcp.zeith.org/).
+
 It verifies each version JSON, client jar, server jar, and Java library against
 the size and SHA-1 published in that metadata. Each local lock manifest also
 records the computed SHA-256.
@@ -32,6 +40,16 @@ Pinned workflow inputs:
 | MCP Archive Tiny v1 | MCP 942 for 1.12.2 | `b961da7dc83c644e11ba3353839bc0d5ca3ba24e0d328d17e48ba56b10690f31` |
 | MCP Archive Tiny v1 | MCPBot/Forge for 1.13.2 | `2c310690a8f1b2dd829446f312022e06836bf247391ca397a6d68ea05dcd16fc` |
 
+The weekly updater pins its GitHub Actions dependencies to these commits:
+
+| Action | Commit |
+|---|---|
+| `actions/checkout` | `3d3c42e5aac5ba805825da76410c181273ba90b1` |
+| `actions/setup-java` | `b6effb05e454b25005698d916606bdc6ffcbf961` |
+| `actions/upload-artifact` | `ea165f8d65b6e75b540449e92b4886f43607fa02` |
+| `actions/download-artifact` | `d3f86a106a0bac45b974a628896c90dbdf5c8093` |
+| `jetify-com/devbox-install-action` | `8c6a66ed6273138b1915457069de78cb52fe3bd7` |
+
 The Tiny v1 mappings come from `GrylaMC/MCP_Archive` commit
 `7e368b355f507d62085497195cfd4c79e532c450`. That archive warns that MCP
 mappings have extremely restrictive terms. The MCP files are downloaded only
@@ -43,3 +61,14 @@ The binary embeds the tracked values from
 below `reference/work/versions/<version>/manifest.lock.json`
 record the exact artifacts used in a local run. Those files remain ignored
 because they contain local paths and describe restricted local artifacts.
+
+## Update policy
+
+The updater runs weekly and can also be started manually. It considers only
+stable Java Edition releases from the Mojang manifest. A changed family
+representative is tested on every available side with the Java major declared
+by Mojang. The workflow accepts measured validation counts only after those
+candidate runs pass, creates a staging commit, and dispatches the full
+Compatibility workflow against that exact commit. Only a passing staging
+commit moves to `automation/minecraft-versions` and opens or updates a pull
+request for human review. The workflow never publishes a tag or release.
