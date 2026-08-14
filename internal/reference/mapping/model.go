@@ -129,7 +129,7 @@ func (p *descriptorParser) fieldType(allowVoid bool) (string, error) {
 			return "", fmt.Errorf("invalid object type in descriptor %q", p.descriptor)
 		}
 		name := p.descriptor[nameStart:p.offset]
-		if strings.ContainsAny(name, ".[():") {
+		if !validInternalClassName(name) {
 			return "", fmt.Errorf("invalid object type %q in descriptor %q", name, p.descriptor)
 		}
 		p.offset++
@@ -141,6 +141,18 @@ func (p *descriptorParser) fieldType(allowVoid bool) (string, error) {
 		return "", fmt.Errorf("invalid type in descriptor %q at byte %d", p.descriptor, p.offset)
 	}
 	return strings.Repeat("[", arrayDimensions) + value, nil
+}
+
+func validInternalClassName(name string) bool {
+	if strings.ContainsAny(name, ".[():") {
+		return false
+	}
+	for segment := range strings.SplitSeq(name, "/") {
+		if segment == "" {
+			return false
+		}
+	}
+	return true
 }
 
 func (p *descriptorParser) consume(want byte) bool {
