@@ -7,6 +7,37 @@ The command downloads artifacts from Mojang, verifies them, applies legacy
 names where needed, decompiles them, and writes searchable symbol indexes. It
 supports Java Edition 1.8.9 and 26.1.2.
 
+## Supported versions
+
+<!-- BEGIN GENERATED SUPPORTED VERSIONS -->
+| Family | Tested release | Minimum JDK | Mapping source | Tested sides |
+| --- | --- | ---: | --- | --- |
+| 1.0 | `1.0` | 8 | Pinned MCP mappings | client |
+| 1.1 | `1.1` | 8 | Pinned MCP mappings | client |
+| 1.2 | `1.2.5` | 8 | Pinned MCP mappings | client and server |
+| 1.3 | `1.3.2` | 8 | Pinned MCP mappings | client and server |
+| 1.4 | `1.4.7` | 8 | Pinned MCP mappings | client and server |
+| 1.5 | `1.5.2` | 8 | Pinned MCP mappings | client and server |
+| 1.6 | `1.6.4` | 8 | Pinned MCP mappings | client and server |
+| 1.7 | `1.7.10` | 8 | Pinned MCP mappings | client and server |
+| 1.8 | `1.8.9` | 8 | Pinned MCP mappings | client and server |
+| 1.9 | `1.9.4` | 8 | Pinned MCP mappings | client and server |
+| 1.10 | `1.10.2` | 8 | Pinned MCP mappings | client and server |
+| 1.11 | `1.11.2` | 8 | Pinned MCP mappings | client and server |
+| 1.12 | `1.12.2` | 8 | Pinned MCP mappings | client and server |
+| 1.13 | `1.13.2` | 8 | Pinned MCP mappings | client and server |
+| 1.14 | `1.14.4` | 8 | Mojang client and server mappings | client and server |
+| 1.15 | `1.15.2` | 8 | Mojang client and server mappings | client and server |
+| 1.16 | `1.16.5` | 8 | Mojang client and server mappings | client and server |
+| 1.17 | `1.17.1` | 16 | Mojang client and server mappings | client and server |
+| 1.18 | `1.18.2` | 17 | Mojang client and server mappings | client and server |
+| 1.19 | `1.19.4` | 17 | Mojang client and server mappings | client and server |
+| 1.20 | `1.20.6` | 21 | Mojang client and server mappings | client and server |
+| 1.21 | `1.21.11` | 21 | Mojang client and server mappings | client and server |
+| 26.1 | `26.1.2` | 25 | Names distributed with the game | client and server |
+| 26.2 | `26.2` | 25 | Names distributed with the game | client and server |
+<!-- END GENERATED SUPPORTED VERSIONS -->
+
 ## Run a release
 
 Install JDK 25 first. Both `java` and `javap` must be available on `PATH`.

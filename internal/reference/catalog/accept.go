@@ -43,8 +43,8 @@ func Accept(versions []config.Version, reports []pipeline.CompatibilityReport) (
 			if err := validateReport(version, side, validation, report); err != nil {
 				return nil, err
 			}
-			validation.MinSources = acceptedMinimum(report.SourceRecords)
-			validation.MinSymbols = acceptedMinimum(report.SymbolRecords)
+			validation.MinSources = max(validation.MinSources, acceptedMinimum(report.SourceRecords))
+			validation.MinSymbols = max(validation.MinSymbols, acceptedMinimum(report.SymbolRecords))
 			validation.RequiredClasses = append([]string(nil), validation.RequiredClasses...)
 			updated.Sides[side] = validation
 		}

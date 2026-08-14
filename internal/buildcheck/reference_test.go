@@ -2,10 +2,14 @@ package buildcheck
 
 import (
 	"bytes"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/go-theft-craft/minecraft-reference/internal/reference/catalog"
+	"github.com/go-theft-craft/minecraft-reference/internal/reference/config"
 )
 
 func TestRestrictedReferenceArtifactsAreNotTracked(t *testing.T) {
@@ -61,5 +65,20 @@ func TestCustomReferenceGeneratedPathsAreIgnored(t *testing.T) {
 				t.Fatalf("git check-ignore %q: %v", test.path, err)
 			}
 		})
+	}
+}
+
+func TestReadmeSupportedVersionsMatchTrackedCatalog(t *testing.T) {
+	repository := filepath.Join("..", "..")
+	versions, err := config.ReadVersionFile(filepath.Join(repository, "internal", "reference", "config", "defaults", "versions.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	readme, err := os.ReadFile(filepath.Join(repository, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.CheckREADME(readme, versions); err != nil {
+		t.Fatal(err)
 	}
 }

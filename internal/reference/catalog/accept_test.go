@@ -103,3 +103,24 @@ func TestAcceptRejectsReportForDifferentConfiguration(t *testing.T) {
 		})
 	}
 }
+
+func TestAcceptDoesNotLowerExistingThresholds(t *testing.T) {
+	version := config.Version{
+		ID: "1.20.6", Family: "1.20", Java: 21, Naming: "mojang",
+		Sides: map[string]config.Validation{
+			"client": {MinSources: 100, MinSymbols: 200},
+		},
+	}
+	report := pipeline.CompatibilityReport{
+		Version: "1.20.6", Family: "1.20", Side: "client", JavaMajor: 21, JavapMajor: 21,
+		Naming: "mojang", NamedClasses: 1, SourceRecords: 100, SymbolRecords: 200, Passed: true,
+	}
+	accepted, err := Accept([]config.Version{version}, []pipeline.CompatibilityReport{report})
+	if err != nil {
+		t.Fatal(err)
+	}
+	validation := accepted[0].Sides["client"]
+	if validation.MinSources != 100 || validation.MinSymbols != 200 {
+		t.Fatalf("lowered existing thresholds: %#v", validation)
+	}
+}
