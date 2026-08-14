@@ -1,0 +1,6 @@
+{
+  "versions": [
+    {"id": "1.8.9", "java": 8, "naming": "mcp-stable-22"},
+    {"id": "26.1.2", "java": 25, "naming": "identity"}
+  ]
+}

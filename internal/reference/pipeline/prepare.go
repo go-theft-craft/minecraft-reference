@@ -1,0 +1,339 @@
+// Package pipeline coordinates the complete local reference workflow.
+package pipeline
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/go-theft-craft/minecraft-reference/internal/reference/archive"
+	"github.com/go-theft-craft/minecraft-reference/internal/reference/artifact"
+	"github.com/go-theft-craft/minecraft-reference/internal/reference/config"
+	"github.com/go-theft-craft/minecraft-reference/internal/reference/decompile"
+	"github.com/go-theft-craft/minecraft-reference/internal/reference/index"
+	"github.com/go-theft-craft/minecraft-reference/internal/reference/mapping"
+)
+
+// Options configures one non-interactive reference preparation run.
+type Options struct {
+	WorkspaceRoot string
+	ConfigDir     string
+	ReferenceDir  string
+	Versions      []string
+	Sides         []string
+	Java          string
+	Javap         string
+	HTTPClient    *http.Client
+	Progress      func(string)
+}
+
+// Lock records verified inputs and selected strategies for one version.
+type Lock struct {
+	GeneratedAt string                    `json:"generated_at"`
+	Version     string                    `json:"version"`
+	Naming      string                    `json:"naming"`
+	Java        string                    `json:"java"`
+	Javap       string                    `json:"javap"`
+	Artifacts   []artifact.DownloadResult `json:"artifacts"`
+}
+
+// Prepare downloads, names, decompiles, and indexes requested artifacts.
+func Prepare(ctx context.Context, options Options) error {
+	if len(options.Versions) == 0 {
+		return errors.New("at least one version is required")
+	}
+	if len(options.Sides) == 0 {
+		return errors.New("at least one side is required")
+	}
+	for _, side := range options.Sides {
+		if side != "client" && side != "server" {
+			return fmt.Errorf("unsupported side %q; use client or server", side)
+		}
+	}
+	referenceDir, err := artifact.ResolveReferenceDir(options.WorkspaceRoot, options.ReferenceDir)
+	if err != nil {
+		return err
+	}
+	versions, err := config.LoadVersions(options.ConfigDir)
+	if err != nil {
+		return err
+	}
+	tools, err := config.LoadTools(options.ConfigDir)
+	if err != nil {
+		return err
+	}
+	java, err := resolveExecutable(options.Java, "java")
+	if err != nil {
+		return err
+	}
+	javap, err := resolveExecutable(options.Javap, "javap")
+	if err != nil {
+		return err
+	}
+	downloader := artifact.Downloader{Client: options.HTTPClient}
+	resolver := artifact.Resolver{Client: options.HTTPClient}
+
+	for _, versionID := range unique(options.Versions) {
+		version, err := config.RequireVersion(versions, versionID)
+		if err != nil {
+			return err
+		}
+		progress(options, "resolve "+versionID)
+		_, metadataSpec, err := resolver.Resolve(ctx, versionID)
+		if err != nil {
+			return err
+		}
+		versionDir := filepath.Join(referenceDir, "versions", versionID)
+		metadataPath := filepath.Join(referenceDir, "cache", "metadata", versionID+".json")
+		metadataResult, err := downloader.Download(ctx, metadataSpec, metadataPath)
+		if err != nil {
+			return err
+		}
+		metadataBytes, err := os.ReadFile(metadataPath)
+		if err != nil {
+			return fmt.Errorf("read downloaded metadata: %w", err)
+		}
+		metadata, err := resolver.DecodeVersion(metadataBytes, versionID)
+		if err != nil {
+			return err
+		}
+
+		lock := Lock{
+			GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+			Version:     versionID,
+			Naming:      version.Naming,
+			Java:        java,
+			Javap:       javap,
+			Artifacts:   []artifact.DownloadResult{metadataResult},
+		}
+		libraries, libraryResults, err := downloadLibraries(ctx, downloader, metadata, versionDir, options)
+		if err != nil {
+			return err
+		}
+		lock.Artifacts = append(lock.Artifacts, libraryResults...)
+
+		vineflowerTool, err := requireTool(tools, "vineflower-1.12.0")
+		if err != nil {
+			return err
+		}
+		vineflower, result, err := downloadTool(ctx, downloader, referenceDir, vineflowerTool)
+		if err != nil {
+			return err
+		}
+		lock.Artifacts = append(lock.Artifacts, result)
+
+		var specialSource, composedMapping string
+		if version.Naming == "mcp-stable-22" {
+			specialSource, composedMapping, libraryResults, err = prepareMCP(ctx, downloader, referenceDir, versionDir, tools)
+			if err != nil {
+				return err
+			}
+			lock.Artifacts = append(lock.Artifacts, libraryResults...)
+		} else if version.Naming != "identity" {
+			return fmt.Errorf("unsupported naming strategy %q", version.Naming)
+		}
+
+		for _, side := range unique(options.Sides) {
+			download, ok := metadata.Downloads[side]
+			if !ok {
+				return fmt.Errorf("version %s has no %s download", versionID, side)
+			}
+			sideDir := filepath.Join(versionDir, side)
+			original := filepath.Join(sideDir, "original.jar")
+			progress(options, fmt.Sprintf("download %s %s", versionID, side))
+			result, err := downloader.Download(ctx, artifact.DownloadSpec{URL: download.URL, Size: download.Size, SHA1: download.SHA1}, original)
+			if err != nil {
+				return err
+			}
+			lock.Artifacts = append(lock.Artifacts, result)
+
+			analysisJar := original
+			if side == "server" {
+				analysisJar, err = decompile.ExecutableServer(original, filepath.Join(sideDir, "executable.jar"))
+				if err != nil {
+					return err
+				}
+			}
+			if version.Naming == "mcp-stable-22" {
+				mapped := filepath.Join(sideDir, "named.jar")
+				progress(options, fmt.Sprintf("remap %s %s", versionID, side))
+				if err := mapping.Remap(ctx, java, specialSource, analysisJar, mapped, composedMapping); err != nil {
+					return err
+				}
+				analysisJar = mapped
+			}
+
+			sourceDir := filepath.Join(referenceDir, "sources", versionID, side)
+			progress(options, fmt.Sprintf("decompile %s %s", versionID, side))
+			if err := decompile.RunVineflower(ctx, java, vineflower, analysisJar, sourceDir, libraries); err != nil {
+				return err
+			}
+			indexDir := filepath.Join(referenceDir, "index", versionID, side)
+			progress(options, fmt.Sprintf("index %s %s", versionID, side))
+			if err := index.GenerateJavap(ctx, javap, analysisJar, filepath.Join(indexDir, "symbols.jsonl"), versionID, side); err != nil {
+				return err
+			}
+			if err := index.GenerateSource(sourceDir, filepath.Join(indexDir, "sources.jsonl")); err != nil {
+				return err
+			}
+		}
+		if err := writeJSON(filepath.Join(versionDir, "manifest.lock.json"), lock); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Clean removes one validated workspace-local reference directory.
+func Clean(workspaceRoot, requested string) (string, error) {
+	target, err := artifact.ResolveReferenceDir(workspaceRoot, requested)
+	if err != nil {
+		return "", err
+	}
+	if err := os.RemoveAll(target); err != nil {
+		return "", fmt.Errorf("remove %s: %w", target, err)
+	}
+	return target, nil
+}
+
+func downloadLibraries(ctx context.Context, downloader artifact.Downloader, metadata artifact.VersionMetadata, versionDir string, options Options) ([]string, []artifact.DownloadResult, error) {
+	paths := make([]string, 0, len(metadata.Libraries))
+	results := make([]artifact.DownloadResult, 0, len(metadata.Libraries))
+	for _, library := range metadata.Libraries {
+		if library.HasClassifier() {
+			continue
+		}
+		remote := library.Downloads.Artifact
+		if remote == nil {
+			continue
+		}
+		relative, err := artifact.LibraryPath(library)
+		if err != nil {
+			return nil, nil, fmt.Errorf("library %s: %w", library.Name, err)
+		}
+		destination := filepath.Join(versionDir, "libraries", filepath.FromSlash(relative))
+		progress(options, "download library "+library.Name)
+		result, err := downloader.Download(ctx, artifact.DownloadSpec{URL: remote.URL, Size: remote.Size, SHA1: remote.SHA1}, destination)
+		if err != nil {
+			return nil, nil, err
+		}
+		paths = append(paths, destination)
+		results = append(results, result)
+	}
+	sort.Strings(paths)
+	return paths, results, nil
+}
+
+func prepareMCP(ctx context.Context, downloader artifact.Downloader, referenceDir, versionDir string, tools map[string]config.Tool) (string, string, []artifact.DownloadResult, error) {
+	ids := []string{"specialsource-1.11.4", "mcp-1.8.9-srg", "mcp-stable-22-1.8.9"}
+	paths := make(map[string]string, len(ids))
+	results := make([]artifact.DownloadResult, 0, len(ids))
+	for _, id := range ids {
+		tool, err := requireTool(tools, id)
+		if err != nil {
+			return "", "", nil, err
+		}
+		path, result, err := downloadTool(ctx, downloader, referenceDir, tool)
+		if err != nil {
+			return "", "", nil, err
+		}
+		paths[id] = path
+		results = append(results, result)
+	}
+	mappingDir := filepath.Join(versionDir, "mappings")
+	joined := filepath.Join(mappingDir, "joined.srg")
+	fields := filepath.Join(mappingDir, "fields.csv")
+	methods := filepath.Join(mappingDir, "methods.csv")
+	for _, extraction := range []struct{ archive, name, destination string }{
+		{paths["mcp-1.8.9-srg"], "joined.srg", joined},
+		{paths["mcp-stable-22-1.8.9"], "fields.csv", fields},
+		{paths["mcp-stable-22-1.8.9"], "methods.csv", methods},
+	} {
+		if err := archive.ExtractFile(extraction.archive, extraction.name, extraction.destination); err != nil {
+			return "", "", nil, err
+		}
+	}
+	composed := filepath.Join(mappingDir, "joined-stable-22.srg")
+	if err := mapping.ComposeMCP(joined, fields, methods, composed); err != nil {
+		return "", "", nil, err
+	}
+	return paths["specialsource-1.11.4"], composed, results, nil
+}
+
+func downloadTool(ctx context.Context, downloader artifact.Downloader, referenceDir string, tool config.Tool) (string, artifact.DownloadResult, error) {
+	parsed, err := url.Parse(tool.URL)
+	if err != nil {
+		return "", artifact.DownloadResult{}, fmt.Errorf("parse tool URL: %w", err)
+	}
+	extension := filepath.Ext(parsed.Path)
+	path := filepath.Join(referenceDir, "cache", "tools", tool.ID+extension)
+	result, err := downloader.Download(ctx, artifact.DownloadSpec{URL: tool.URL, SHA256: tool.SHA256}, path)
+	return path, result, err
+}
+
+func requireTool(tools map[string]config.Tool, id string) (config.Tool, error) {
+	tool, ok := tools[id]
+	if !ok {
+		return config.Tool{}, fmt.Errorf("required tool %q is not configured", id)
+	}
+	return tool, nil
+}
+
+func resolveExecutable(requested, fallback string) (string, error) {
+	name := requested
+	if name == "" {
+		name = fallback
+	}
+	path, err := exec.LookPath(name)
+	if err != nil {
+		return "", fmt.Errorf("find %s executable: %w", name, err)
+	}
+	return path, nil
+}
+
+func unique(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
+}
+
+func writeJSON(path string, value any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
+}
+
+func progress(options Options, message string) {
+	if options.Progress != nil {
+		options.Progress(message)
+	}
+}

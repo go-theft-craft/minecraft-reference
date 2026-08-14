@@ -1,0 +1,15 @@
+/.devbox/
+/.direnv/
+/.idea/
+/.task/
+/coverage.out
+/build/
+/dist/
+/reference/work/
+*.jar
+*.class
+*.java
+*.tiny
+*.tsrg
+*.srg
+*.csrg
