@@ -1,6 +1,11 @@
 package pipeline
 
 import (
+	"context"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -42,4 +47,63 @@ func TestValidateJavaMajorRejectsOldTool(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "Minecraft 1.21.8 requires Java 21 or newer") {
 		t.Fatalf("got %v", err)
 	}
+}
+
+func TestPreflightJavaAcceptsSymlinkedToolsFromOneJDK(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test fixtures use POSIX executable scripts")
+	}
+	root := t.TempDir()
+	effectiveBin := filepath.Join(root, "jdk", "lib", "openjdk", "bin")
+	java := writeJavaTool(t, effectiveBin, "java", 25)
+	javap := writeJavaTool(t, effectiveBin, "javap", 25)
+	if err := os.Symlink(filepath.Join("lib", "openjdk", "bin"), filepath.Join(root, "jdk", "bin")); err != nil {
+		t.Fatal(err)
+	}
+	profileBin := filepath.Join(root, "profile", "bin")
+	if err := os.MkdirAll(profileBin, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	javaLink := filepath.Join(profileBin, "java")
+	javapLink := filepath.Join(profileBin, "javap")
+	if err := os.Symlink(filepath.Join(root, "jdk", "bin", "java"), javaLink); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "jdk", "bin", "javap"), javapLink); err != nil {
+		t.Fatal(err)
+	}
+
+	toolchain, err := preflightJava(context.Background(), javaLink, javapLink, 25, "26.2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if toolchain.javaPath != java || toolchain.javapPath != javap {
+		t.Fatalf("did not resolve effective tools: %#v", toolchain)
+	}
+}
+
+func TestPreflightJavaRejectsToolsFromDifferentJDKs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test fixtures use POSIX executable scripts")
+	}
+	root := t.TempDir()
+	java := writeJavaTool(t, filepath.Join(root, "jdk-one", "bin"), "java", 25)
+	javap := writeJavaTool(t, filepath.Join(root, "jdk-two", "bin"), "javap", 25)
+
+	_, err := preflightJava(context.Background(), java, javap, 25, "26.2")
+	if err == nil || !strings.Contains(err.Error(), "same JDK bin directory") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func writeJavaTool(t *testing.T, directory, name string, major int) string {
+	t.Helper()
+	if err := os.MkdirAll(directory, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(directory, name)
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nprintf '"+strconv.Itoa(major)+".0.0\\n'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }

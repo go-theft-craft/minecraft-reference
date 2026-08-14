@@ -12,8 +12,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/go-theft-craft/minecraft-reference/internal/reference/archive"
+	"github.com/go-theft-craft/minecraft-reference/internal/reference/mapping"
 )
 
 const javapBatchSize = 40
@@ -27,6 +29,70 @@ type Symbol struct {
 	Name        string `json:"name"`
 	Descriptor  string `json:"descriptor"`
 	Declaration string `json:"declaration"`
+}
+
+// ValidateSymbol verifies one symbol record against its generating run.
+func ValidateSymbol(symbol Symbol, version, side string) error {
+	if symbol.Version != version {
+		return fmt.Errorf("version %q does not match %q", symbol.Version, version)
+	}
+	if symbol.Side != side {
+		return fmt.Errorf("side %q does not match %q", symbol.Side, side)
+	}
+	if !validOwner(symbol.Owner) {
+		return fmt.Errorf("owner %q is not a valid class", symbol.Owner)
+	}
+
+	methodDescriptor := false
+	switch symbol.Kind {
+	case "field":
+		if !validMemberName(symbol.Name) {
+			return fmt.Errorf("field name %q is invalid", symbol.Name)
+		}
+	case "method":
+		methodDescriptor = true
+		if !validMemberName(symbol.Name) {
+			return fmt.Errorf("method name %q is invalid", symbol.Name)
+		}
+	case "constructor":
+		methodDescriptor = true
+		if symbol.Name != "<init>" {
+			return fmt.Errorf("constructor name %q is invalid", symbol.Name)
+		}
+	case "initializer":
+		if symbol.Name != "<clinit>" {
+			return fmt.Errorf("initializer name %q is invalid", symbol.Name)
+		}
+		if symbol.Descriptor != "()V" {
+			return fmt.Errorf("initializer descriptor %q is invalid", symbol.Descriptor)
+		}
+		return nil
+	default:
+		return fmt.Errorf("kind %q is invalid", symbol.Kind)
+	}
+	if err := mapping.ValidateDescriptor(symbol.Descriptor, methodDescriptor); err != nil {
+		return fmt.Errorf("descriptor %q is invalid: %w", symbol.Descriptor, err)
+	}
+	if symbol.Kind == "constructor" && !strings.HasSuffix(symbol.Descriptor, ")V") {
+		return fmt.Errorf("constructor descriptor %q must return void", symbol.Descriptor)
+	}
+	return nil
+}
+
+func validOwner(owner string) bool {
+	if owner == "" || strings.ContainsAny(owner, "/;[():") {
+		return false
+	}
+	for segment := range strings.SplitSeq(owner, ".") {
+		if segment == "" || strings.IndexFunc(segment, unicode.IsSpace) >= 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func validMemberName(name string) bool {
+	return name != "" && !strings.ContainsAny(name, ".;/[()<>") && strings.IndexFunc(name, unicode.IsSpace) < 0
 }
 
 // GenerateJavap writes deterministic JSON Lines records for every jar member.
@@ -134,7 +200,11 @@ func declaredOwner(line string) string {
 	for i, field := range fields {
 		if field == "class" || field == "interface" || field == "enum" {
 			if i+1 < len(fields) {
-				return strings.TrimSuffix(fields[i+1], "<")
+				owner := fields[i+1]
+				if generic := strings.IndexByte(owner, '<'); generic >= 0 {
+					owner = owner[:generic]
+				}
+				return owner
 			}
 		}
 	}

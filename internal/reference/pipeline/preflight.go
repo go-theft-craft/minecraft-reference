@@ -3,7 +3,9 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -25,6 +27,9 @@ func preflightJava(ctx context.Context, javaName, javapName string, required int
 	}
 	javapPath, err := resolveExecutable(javapName, "javap")
 	if err != nil {
+		return javaToolchain{}, err
+	}
+	if err := requireSameJDKBin(javaPath, javapPath); err != nil {
 		return javaToolchain{}, err
 	}
 
@@ -49,6 +54,23 @@ func preflightJava(ctx context.Context, javaName, javapName string, required int
 		javapPath:  javapPath,
 		javapMajor: javapMajor,
 	}, nil
+}
+
+func requireSameJDKBin(javaPath, javapPath string) error {
+	javaBin := filepath.Dir(javaPath)
+	javapBin := filepath.Dir(javapPath)
+	javaBinInfo, err := os.Stat(javaBin)
+	if err != nil {
+		return fmt.Errorf("inspect java bin directory %s: %w", javaBin, err)
+	}
+	javapBinInfo, err := os.Stat(javapBin)
+	if err != nil {
+		return fmt.Errorf("inspect javap bin directory %s: %w", javapBin, err)
+	}
+	if !os.SameFile(javaBinInfo, javapBinInfo) {
+		return fmt.Errorf("java at %s and javap at %s must resolve to the same JDK bin directory", javaPath, javapPath)
+	}
+	return nil
 }
 
 func inspectJavaMajor(ctx context.Context, name, path string) (int, error) {

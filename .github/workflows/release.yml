@@ -27,8 +27,11 @@ jobs:
       - name: Verify
         run: devbox run -- task verify
 
+  compatibility:
+    uses: ./.github/workflows/compatibility.yml
+
   release:
-    needs: verify
+    needs: [verify, compatibility]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

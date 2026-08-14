@@ -6,6 +6,13 @@
 /build/
 /dist/
 /reference/work/
+# Generated reference evidence remains local even with a custom reference directory.
+**/cache/tools/**
+**/versions/*/mappings/**
+**/compatibility.json
+**/manifest.lock.json
+**/sources.jsonl
+**/symbols.jsonl
 *.jar
 *.class
 *.java

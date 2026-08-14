@@ -53,8 +53,8 @@ func ReadFile(zipPath, name string) ([]byte, error) {
 	return nil, fmt.Errorf("%w: %s in %s", os.ErrNotExist, name, zipPath)
 }
 
-// ListClasses returns top-level JVM class names stored in a jar.
-func ListClasses(jarPath string) ([]string, error) {
+// ListClassPaths returns class entry paths without the .class suffix.
+func ListClassPaths(jarPath string) ([]string, error) {
 	reader, err := zip.OpenReader(jarPath)
 	if err != nil {
 		return nil, fmt.Errorf("open jar %s: %w", jarPath, err)
@@ -65,8 +65,20 @@ func ListClasses(jarPath string) ([]string, error) {
 		if file.FileInfo().IsDir() || !strings.HasSuffix(file.Name, ".class") || strings.HasPrefix(file.Name, "META-INF/versions/") {
 			continue
 		}
-		name := strings.TrimSuffix(file.Name, ".class")
-		classes = append(classes, strings.ReplaceAll(name, "/", "."))
+		classes = append(classes, strings.TrimSuffix(file.Name, ".class"))
+	}
+	return classes, nil
+}
+
+// ListClasses returns JVM binary class names stored in a jar.
+func ListClasses(jarPath string) ([]string, error) {
+	paths, err := ListClassPaths(jarPath)
+	if err != nil {
+		return nil, err
+	}
+	classes := make([]string, 0, len(paths))
+	for _, path := range paths {
+		classes = append(classes, strings.ReplaceAll(path, "/", "."))
 	}
 	return classes, nil
 }

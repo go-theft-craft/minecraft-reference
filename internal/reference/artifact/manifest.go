@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 )
 
 const (
@@ -25,6 +26,20 @@ type RemoteFile struct {
 	SHA1 string `json:"sha1"`
 	Size int64  `json:"size"`
 	URL  string `json:"url"`
+}
+
+// Release identifies one entry in Mojang's Java Edition version manifest.
+type Release struct {
+	ID          string    `json:"id"`
+	Type        string    `json:"type"`
+	ReleaseTime time.Time `json:"releaseTime"`
+	URL         string    `json:"url"`
+	SHA1        string    `json:"sha1"`
+}
+
+// JavaVersion contains the Java runtime requirement declared by Mojang.
+type JavaVersion struct {
+	MajorVersion int `json:"majorVersion"`
 }
 
 // Library is a Java library entry from a version manifest.
@@ -43,19 +58,20 @@ func (library Library) HasClassifier() bool {
 
 // VersionMetadata contains the analysis inputs for one Minecraft version.
 type VersionMetadata struct {
-	ID        string                `json:"id"`
-	Downloads map[string]RemoteFile `json:"downloads"`
-	Libraries []Library             `json:"libraries"`
+	ID          string                `json:"id"`
+	JavaVersion JavaVersion           `json:"javaVersion"`
+	Downloads   map[string]RemoteFile `json:"downloads"`
+	Libraries   []Library             `json:"libraries"`
+}
+
+// MappingDownload returns the official mapping artifact for one game side.
+func (metadata VersionMetadata) MappingDownload(side string) (RemoteFile, bool) {
+	download, ok := metadata.Downloads[side+"_mappings"]
+	return download, ok
 }
 
 type manifest struct {
-	Versions []manifestVersion `json:"versions"`
-}
-
-type manifestVersion struct {
-	ID   string `json:"id"`
-	URL  string `json:"url"`
-	SHA1 string `json:"sha1"`
+	Versions []Release `json:"versions"`
 }
 
 // Resolver reads Mojang's version metadata without downloading game artifacts.
@@ -64,20 +80,29 @@ type Resolver struct {
 	ManifestURL string
 }
 
-// Resolve finds the verified version-metadata download for an exact version ID.
-func (r Resolver) Resolve(ctx context.Context, version string) (VersionMetadata, DownloadSpec, error) {
+// ListReleases returns every entry in Mojang's version manifest in manifest order.
+func (r Resolver) ListReleases(ctx context.Context) ([]Release, error) {
 	manifestURL := r.ManifestURL
 	if manifestURL == "" {
 		manifestURL = VersionManifestURL
 	}
 	var index manifest
 	if err := r.getJSON(ctx, manifestURL, &index); err != nil {
+		return nil, fmt.Errorf("read version manifest: %w", err)
+	}
+	return index.Versions, nil
+}
+
+// Resolve finds the verified version-metadata download for an exact version ID.
+func (r Resolver) Resolve(ctx context.Context, version string) (VersionMetadata, DownloadSpec, error) {
+	releases, err := r.ListReleases(ctx)
+	if err != nil {
 		return VersionMetadata{}, DownloadSpec{}, fmt.Errorf("resolve version manifest: %w", err)
 	}
 
-	var selected *manifestVersion
-	for i := range index.Versions {
-		entry := &index.Versions[i]
+	var selected *Release
+	for i := range releases {
+		entry := &releases[i]
 		if entry.ID != version {
 			continue
 		}
@@ -128,10 +153,10 @@ func (r Resolver) getJSON(ctx context.Context, source string, destination any) e
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
-	client := r.Client
-	if client == nil {
-		client = http.DefaultClient
+	if err := validateMetadataURL(request.URL); err != nil {
+		return err
 	}
+	client := r.metadataClient()
 	response, err := client.Do(request)
 	if err != nil {
 		return fmt.Errorf("GET %s: %w", source, err)
