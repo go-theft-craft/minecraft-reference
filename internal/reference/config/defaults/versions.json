@@ -1,6 +1,29 @@
 {
   "versions": [
-    {"id": "1.8.9", "java": 8, "naming": "mcp-stable-22"},
-    {"id": "26.1.2", "java": 25, "naming": "identity"}
+    {
+      "id": "1.8.9",
+      "family": "1.8",
+      "java": 8,
+      "naming": "mcp",
+      "mapping": {
+        "format": "srg-csv",
+        "srg_tool": "mcp-1.8.9-srg",
+        "names_tool": "mcp-stable-22-1.8.9"
+      },
+      "sides": {
+        "client": {"min_sources": 1, "min_symbols": 1, "required_classes": ["Minecraft"]},
+        "server": {"min_sources": 1, "min_symbols": 1, "required_classes": ["MinecraftServer"]}
+      }
+    },
+    {
+      "id": "26.1.2",
+      "family": "26",
+      "java": 25,
+      "naming": "identity",
+      "sides": {
+        "client": {"min_sources": 1, "min_symbols": 1, "required_classes": ["Minecraft"]},
+        "server": {"min_sources": 1, "min_symbols": 1, "required_classes": ["MinecraftServer"]}
+      }
+    }
   ]
 }
