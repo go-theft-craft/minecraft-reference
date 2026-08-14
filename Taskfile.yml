@@ -105,6 +105,30 @@ tasks:
       - task: vuln
       - task: build
       - task: release:check
+      - task: versions:check
+
+  versions:check:
+    desc: Check that README lists the configured Minecraft versions
+    cmds:
+      - go run ./cmd/mcversionupdate readme --config internal/reference/config/defaults/versions.json --file README.md --check
+
+  versions:matrix:
+    desc: Print the configured compatibility matrix
+    cmds:
+      - go run ./cmd/mcversionupdate matrix --config internal/reference/config/defaults/versions.json
+
+  compatibility:
+    desc: Prepare compatibility evidence for selected Minecraft versions
+    requires:
+      vars: [VERSIONS]
+    cmds:
+      - task: reference:prepare
+        vars:
+          VERSIONS: '{{.VERSIONS}}'
+          SIDES: '{{.SIDES | default "client,server"}}'
+          JAVA: '{{.JAVA | default "java"}}'
+          JAVAP: '{{.JAVAP | default "javap"}}'
+          CONFIG_DIR: '{{.CONFIG_DIR | default ""}}'
 
   reference:prepare:
     desc: Download, name, decompile, and index Minecraft reference artifacts
@@ -114,6 +138,9 @@ tasks:
       SIDES: '{{.SIDES | default "client,server"}}'
       REFERENCE_DIR: '{{.REFERENCE_DIR | default "reference/work"}}'
       WORKSPACE: '{{.WORKSPACE | default "."}}'
+      JAVA: '{{.JAVA | default "java"}}'
+      JAVAP: '{{.JAVAP | default "javap"}}'
+      CONFIG_DIR: '{{.CONFIG_DIR | default ""}}'
     cmds:
       - >-
         go run ./cmd/mcreference prepare
@@ -121,6 +148,9 @@ tasks:
         --sides '{{.SIDES}}'
         --workspace '{{.WORKSPACE}}'
         --reference-dir '{{.REFERENCE_DIR}}'
+        --java '{{.JAVA}}'
+        --javap '{{.JAVAP}}'
+        --config-dir '{{.CONFIG_DIR}}'
 
   reference:clean:
     desc: Remove the validated local reference workspace
