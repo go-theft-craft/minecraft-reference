@@ -200,7 +200,11 @@ func declaredOwner(line string) string {
 	for i, field := range fields {
 		if field == "class" || field == "interface" || field == "enum" {
 			if i+1 < len(fields) {
-				return strings.TrimSuffix(fields[i+1], "<")
+				owner := fields[i+1]
+				if generic := strings.IndexByte(owner, '<'); generic >= 0 {
+					owner = owner[:generic]
+				}
+				return owner
 			}
 		}
 	}

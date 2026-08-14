@@ -48,6 +48,27 @@ func TestParseJavapAcceptsPackagePrivateInterface(t *testing.T) {
 	}
 }
 
+func TestParseJavapRecognizesGenericClassConstructor(t *testing.T) {
+	data := `Compiled from "PropertyEnum.java"
+public class net.minecraft.block.properties.PropertyEnum<T extends java.lang.Enum<T>> {
+  protected net.minecraft.block.properties.PropertyEnum(java.lang.String, java.lang.Class<T>);
+    descriptor: (Ljava/lang/String;Ljava/lang/Class;)V
+}`
+	symbols, err := ParseJavap(data, "1.8.9", "client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(symbols) != 1 {
+		t.Fatalf("got %d symbols: %#v", len(symbols), symbols)
+	}
+	if symbols[0].Owner != "net.minecraft.block.properties.PropertyEnum" || symbols[0].Kind != "constructor" || symbols[0].Name != "<init>" {
+		t.Fatalf("unexpected generic constructor: %#v", symbols[0])
+	}
+	if err := ValidateSymbol(symbols[0], "1.8.9", "client"); err != nil {
+		t.Fatalf("ValidateSymbol: %v", err)
+	}
+}
+
 func TestValidateSymbolAcceptsGeneratedRecordKinds(t *testing.T) {
 	for _, symbol := range []Symbol{
 		{Version: "1.8.9", Side: "client", Owner: "net.minecraft.Game", Kind: "field", Name: "health", Descriptor: "I"},

@@ -1,6 +1,200 @@
 {
   "versions": [
     {
+      "id": "1.0",
+      "family": "1.0",
+      "java": 8,
+      "naming": "mcp",
+      "mapping": {
+        "format": "tiny-v1",
+        "tool": "mcp-1.0-tiny"
+      },
+      "sides": {
+        "client": {
+          "min_sources": 837,
+          "min_symbols": 9526,
+          "required_classes": [
+            "Minecraft"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.1",
+      "family": "1.1",
+      "java": 8,
+      "naming": "mcp",
+      "mapping": {
+        "format": "tiny-v1",
+        "tool": "mcp-1.1-tiny"
+      },
+      "sides": {
+        "client": {
+          "min_sources": 867,
+          "min_symbols": 9882,
+          "required_classes": [
+            "Minecraft"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.2.5",
+      "family": "1.2",
+      "java": 8,
+      "naming": "mcp",
+      "mapping": {
+        "format": "tiny-v1",
+        "tool": "mcp-1.2.5-tiny"
+      },
+      "sides": {
+        "client": {
+          "min_sources": 884,
+          "min_symbols": 10476,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 646,
+          "min_symbols": 7495,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.3.2",
+      "family": "1.3",
+      "java": 8,
+      "naming": "mcp",
+      "mapping": {
+        "format": "tiny-v1",
+        "tool": "mcp-1.3.2-tiny"
+      },
+      "sides": {
+        "client": {
+          "min_sources": 1062,
+          "min_symbols": 12602,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 778,
+          "min_symbols": 8762,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.4.7",
+      "family": "1.4",
+      "java": 8,
+      "naming": "mcp",
+      "mapping": {
+        "format": "tiny-v1",
+        "tool": "mcp-1.4.7-tiny"
+      },
+      "sides": {
+        "client": {
+          "min_sources": 1197,
+          "min_symbols": 14273,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 877,
+          "min_symbols": 9967,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.5.2",
+      "family": "1.5",
+      "java": 8,
+      "naming": "mcp",
+      "mapping": {
+        "format": "tiny-v1",
+        "tool": "mcp-1.5.2-tiny"
+      },
+      "sides": {
+        "client": {
+          "min_sources": 1317,
+          "min_symbols": 16050,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 948,
+          "min_symbols": 10773,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.6.4",
+      "family": "1.6",
+      "java": 8,
+      "naming": "mcp",
+      "mapping": {
+        "format": "tiny-v1",
+        "tool": "mcp-1.6.4-tiny"
+      },
+      "sides": {
+        "client": {
+          "min_sources": 1401,
+          "min_symbols": 17295,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 987,
+          "min_symbols": 11394,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.7.10",
+      "family": "1.7",
+      "java": 8,
+      "naming": "mcp",
+      "mapping": {
+        "format": "tiny-v1",
+        "tool": "mcp-1.7.10-tiny"
+      },
+      "sides": {
+        "client": {
+          "min_sources": 1622,
+          "min_symbols": 20091,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 1122,
+          "min_symbols": 12770,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
       "id": "1.8.9",
       "family": "1.8",
       "java": 8,
@@ -11,8 +205,327 @@
         "names_tool": "mcp-stable-22-1.8.9"
       },
       "sides": {
-        "client": {"min_sources": 1, "min_symbols": 1, "required_classes": ["Minecraft"]},
-        "server": {"min_sources": 1, "min_symbols": 1, "required_classes": ["MinecraftServer"]}
+        "client": {
+          "min_sources": 1450,
+          "min_symbols": 25719,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 975,
+          "min_symbols": 16821,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.9.4",
+      "family": "1.9",
+      "java": 8,
+      "naming": "mcp",
+      "mapping": {
+        "format": "tiny-v1",
+        "tool": "mcp-1.9.4-tiny"
+      },
+      "sides": {
+        "client": {
+          "min_sources": 1637,
+          "min_symbols": 29392,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 1123,
+          "min_symbols": 20033,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.10.2",
+      "family": "1.10",
+      "java": 8,
+      "naming": "mcp",
+      "mapping": {
+        "format": "srg-csv",
+        "srg_tool": "mcp-1.10.2-srg",
+        "names_tool": "mcp-stable-29-1.10.2"
+      },
+      "sides": {
+        "client": {
+          "min_sources": 1660,
+          "min_symbols": 29913,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 1152,
+          "min_symbols": 20652,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.11.2",
+      "family": "1.11",
+      "java": 8,
+      "naming": "mcp",
+      "mapping": {
+        "format": "tiny-v1",
+        "tool": "mcp-1.11.2-tiny"
+      },
+      "sides": {
+        "client": {
+          "min_sources": 1728,
+          "min_symbols": 31014,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 1182,
+          "min_symbols": 21302,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.12.2",
+      "family": "1.12",
+      "java": 8,
+      "naming": "mcp",
+      "mapping": {
+        "format": "tiny-v1",
+        "tool": "mcp-1.12.2-tiny"
+      },
+      "sides": {
+        "client": {
+          "min_sources": 1845,
+          "min_symbols": 33399,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 1257,
+          "min_symbols": 22994,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.13.2",
+      "family": "1.13",
+      "java": 8,
+      "naming": "mcp",
+      "mapping": {
+        "format": "tiny-v1",
+        "tool": "mcp-1.13.2-tiny"
+      },
+      "sides": {
+        "client": {
+          "min_sources": 2442,
+          "min_symbols": 41455,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 1812,
+          "min_symbols": 29673,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.14.4",
+      "family": "1.14",
+      "java": 8,
+      "naming": "mojang",
+      "sides": {
+        "client": {
+          "min_sources": 2805,
+          "min_symbols": 48119,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 2123,
+          "min_symbols": 36468,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.15.2",
+      "family": "1.15",
+      "java": 8,
+      "naming": "mojang",
+      "sides": {
+        "client": {
+          "min_sources": 2870,
+          "min_symbols": 50052,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 2182,
+          "min_symbols": 37891,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.16.5",
+      "family": "1.16",
+      "java": 8,
+      "naming": "mojang",
+      "sides": {
+        "client": {
+          "min_sources": 3033,
+          "min_symbols": 56660,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 2335,
+          "min_symbols": 43504,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.17.1",
+      "family": "1.17",
+      "java": 16,
+      "naming": "mojang",
+      "sides": {
+        "client": {
+          "min_sources": 3553,
+          "min_symbols": 66635,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 2778,
+          "min_symbols": 52938,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.18.2",
+      "family": "1.18",
+      "java": 17,
+      "naming": "mojang",
+      "sides": {
+        "client": {
+          "min_sources": 3637,
+          "min_symbols": 70294,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 2853,
+          "min_symbols": 56354,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.19.4",
+      "family": "1.19",
+      "java": 17,
+      "naming": "mojang",
+      "sides": {
+        "client": {
+          "min_sources": 4091,
+          "min_symbols": 81230,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 3174,
+          "min_symbols": 64142,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.20.6",
+      "family": "1.20",
+      "java": 21,
+      "naming": "mojang",
+      "sides": {
+        "client": {
+          "min_sources": 4617,
+          "min_symbols": 94195,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 3616,
+          "min_symbols": 74957,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "1.21.11",
+      "family": "1.21",
+      "java": 21,
+      "naming": "mojang",
+      "sides": {
+        "client": {
+          "min_sources": 5721,
+          "min_symbols": 116512,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 4185,
+          "min_symbols": 88953,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
       }
     },
     {
@@ -21,8 +534,42 @@
       "java": 25,
       "naming": "identity",
       "sides": {
-        "client": {"min_sources": 1, "min_symbols": 1, "required_classes": ["Minecraft"]},
-        "server": {"min_sources": 1, "min_symbols": 1, "required_classes": ["MinecraftServer"]}
+        "client": {
+          "min_sources": 5936,
+          "min_symbols": 120439,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 4301,
+          "min_symbols": 91583,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
+      }
+    },
+    {
+      "id": "26.2",
+      "family": "26.2",
+      "java": 25,
+      "naming": "identity",
+      "sides": {
+        "client": {
+          "min_sources": 6036,
+          "min_symbols": 123276,
+          "required_classes": [
+            "Minecraft"
+          ]
+        },
+        "server": {
+          "min_sources": 4355,
+          "min_symbols": 93608,
+          "required_classes": [
+            "MinecraftServer"
+          ]
+        }
       }
     }
   ]

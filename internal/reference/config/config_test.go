@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -35,6 +36,86 @@ func TestEmbeddedDefaultsLoad(t *testing.T) {
 	}
 	if _, ok := tools["vineflower-1.12.0"]; !ok {
 		t.Fatal("embedded tools do not contain Vineflower")
+	}
+}
+
+func TestEmbeddedDefaultsContainInitialStableFamilyCatalog(t *testing.T) {
+	versions, err := ReadVersionFile(filepath.Join("defaults", "versions.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type expectedVersion struct {
+		id      string
+		family  string
+		java    int
+		naming  string
+		mapping *Mapping
+		sides   []string
+	}
+	tiny := func(id string) *Mapping {
+		return &Mapping{Format: "tiny-v1", Tool: "mcp-" + id + "-tiny"}
+	}
+	mojangSides := []string{"client", "server"}
+	expected := []expectedVersion{
+		{id: "1.0", family: "1.0", java: 8, naming: "mcp", mapping: tiny("1.0"), sides: []string{"client"}},
+		{id: "1.1", family: "1.1", java: 8, naming: "mcp", mapping: tiny("1.1"), sides: []string{"client"}},
+		{id: "1.2.5", family: "1.2", java: 8, naming: "mcp", mapping: tiny("1.2.5"), sides: mojangSides},
+		{id: "1.3.2", family: "1.3", java: 8, naming: "mcp", mapping: tiny("1.3.2"), sides: mojangSides},
+		{id: "1.4.7", family: "1.4", java: 8, naming: "mcp", mapping: tiny("1.4.7"), sides: mojangSides},
+		{id: "1.5.2", family: "1.5", java: 8, naming: "mcp", mapping: tiny("1.5.2"), sides: mojangSides},
+		{id: "1.6.4", family: "1.6", java: 8, naming: "mcp", mapping: tiny("1.6.4"), sides: mojangSides},
+		{id: "1.7.10", family: "1.7", java: 8, naming: "mcp", mapping: tiny("1.7.10"), sides: mojangSides},
+		{
+			id: "1.8.9", family: "1.8", java: 8, naming: "mcp",
+			mapping: &Mapping{Format: "srg-csv", SRGTool: "mcp-1.8.9-srg", NamesTool: "mcp-stable-22-1.8.9"}, sides: mojangSides,
+		},
+		{id: "1.9.4", family: "1.9", java: 8, naming: "mcp", mapping: tiny("1.9.4"), sides: mojangSides},
+		{
+			id: "1.10.2", family: "1.10", java: 8, naming: "mcp",
+			mapping: &Mapping{Format: "srg-csv", SRGTool: "mcp-1.10.2-srg", NamesTool: "mcp-stable-29-1.10.2"}, sides: mojangSides,
+		},
+		{id: "1.11.2", family: "1.11", java: 8, naming: "mcp", mapping: tiny("1.11.2"), sides: mojangSides},
+		{id: "1.12.2", family: "1.12", java: 8, naming: "mcp", mapping: tiny("1.12.2"), sides: mojangSides},
+		{id: "1.13.2", family: "1.13", java: 8, naming: "mcp", mapping: tiny("1.13.2"), sides: mojangSides},
+		{id: "1.14.4", family: "1.14", java: 8, naming: "mojang", sides: mojangSides},
+		{id: "1.15.2", family: "1.15", java: 8, naming: "mojang", sides: mojangSides},
+		{id: "1.16.5", family: "1.16", java: 8, naming: "mojang", sides: mojangSides},
+		{id: "1.17.1", family: "1.17", java: 16, naming: "mojang", sides: mojangSides},
+		{id: "1.18.2", family: "1.18", java: 17, naming: "mojang", sides: mojangSides},
+		{id: "1.19.4", family: "1.19", java: 17, naming: "mojang", sides: mojangSides},
+		{id: "1.20.6", family: "1.20", java: 21, naming: "mojang", sides: mojangSides},
+		{id: "1.21.11", family: "1.21", java: 21, naming: "mojang", sides: mojangSides},
+		{id: "26.1.2", family: "26.1", java: 25, naming: "identity", sides: mojangSides},
+		{id: "26.2", family: "26.2", java: 25, naming: "identity", sides: mojangSides},
+	}
+	if len(versions) != len(expected) {
+		t.Fatalf("got %d configured versions, want %d", len(versions), len(expected))
+	}
+	for index, want := range expected {
+		got := versions[index]
+		if got.ID != want.id || got.Family != want.family || got.Java != want.java || got.Naming != want.naming || !reflect.DeepEqual(got.Mapping, want.mapping) {
+			t.Errorf("version %d: got %#v, want %#v", index, got, want)
+			continue
+		}
+		gotSides := make([]string, 0, len(got.Sides))
+		for _, side := range []string{"client", "server"} {
+			validation, ok := got.Sides[side]
+			if !ok {
+				continue
+			}
+			gotSides = append(gotSides, side)
+			wantClass := "Minecraft"
+			if side == "server" {
+				wantClass = "MinecraftServer"
+			}
+			if validation.MinSources < 1 || validation.MinSymbols < 1 || !reflect.DeepEqual(validation.RequiredClasses, []string{wantClass}) {
+				t.Errorf("version %s side %s has unexpected validation: %#v", got.ID, side, validation)
+			}
+		}
+		if !reflect.DeepEqual(gotSides, want.sides) {
+			t.Errorf("version %s sides: got %v, want %v", got.ID, gotSides, want.sides)
+		}
 	}
 }
 
