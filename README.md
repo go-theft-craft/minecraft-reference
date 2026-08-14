@@ -39,6 +39,14 @@ Replace `VERSION`, `SYSTEM`, and `ARCH` with the values from the downloaded
 archive name. Each release also provides `checksums.txt` and an SBOM for every
 archive.
 
+Before it downloads files, `prepare` checks that both `java` and `javap` exist
+and meet the Java requirement for every requested Minecraft version.
+
+[![Terminal demo of mcreference preparing Minecraft 26.1.2 server reference files](docs/assets/mcreference-terminal-demo.gif)](docs/assets/mcreference-terminal-demo.mp4)
+
+The demo compresses a real run that produced 4,779 source records and 101,759
+symbol records. Select the image to open the MP4 version.
+
 ## Build from source
 
 ```bash
@@ -50,6 +58,10 @@ The binary includes its supported-version and tool configuration. Use
 `--config-dir` to replace both `versions.json` and `tools.json`. Game jars,
 mappings, Java sources, and generated indexes stay below the selected
 workspace and must not be committed or published.
+
+A custom version entry also needs a reviewed naming strategy. Do not use
+`identity` for an obfuscated Minecraft jar; the command can finish while
+producing an incomplete index.
 
 The development environment supplies OpenJDK through Devbox:
 

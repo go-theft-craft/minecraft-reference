@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -34,5 +35,18 @@ func TestEmbeddedDefaultsLoad(t *testing.T) {
 	}
 	if _, ok := tools["vineflower-1.12.0"]; !ok {
 		t.Fatal("embedded tools do not contain Vineflower")
+	}
+}
+
+func TestLoadVersionsRejectsMissingJavaRequirement(t *testing.T) {
+	directory := t.TempDir()
+	data := []byte(`{"versions":[{"id":"test","java":0,"naming":"identity"}]}`)
+	if err := os.WriteFile(filepath.Join(directory, "versions.json"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadVersions(directory)
+	if err == nil || !strings.Contains(err.Error(), "invalid Java requirement") {
+		t.Fatalf("got %v", err)
 	}
 }

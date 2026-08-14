@@ -71,22 +71,34 @@ func Prepare(ctx context.Context, options Options) error {
 	if err != nil {
 		return err
 	}
-	java, err := resolveExecutable(options.Java, "java")
-	if err != nil {
-		return err
-	}
-	javap, err := resolveExecutable(options.Javap, "javap")
-	if err != nil {
-		return err
-	}
-	downloader := artifact.Downloader{Client: options.HTTPClient}
-	resolver := artifact.Resolver{Client: options.HTTPClient}
-
-	for _, versionID := range unique(options.Versions) {
+	versionIDs := unique(options.Versions)
+	selectedVersions := make([]config.Version, 0, len(versionIDs))
+	requiredJava := 0
+	requiredBy := ""
+	for _, versionID := range versionIDs {
 		version, err := config.RequireVersion(versions, versionID)
 		if err != nil {
 			return err
 		}
+		selectedVersions = append(selectedVersions, version)
+		if version.Java > requiredJava {
+			requiredJava = version.Java
+			requiredBy = version.ID
+		}
+	}
+	progress(options, "preflight java and javap")
+	toolchain, err := preflightJava(ctx, options.Java, options.Javap, requiredJava, requiredBy)
+	if err != nil {
+		return err
+	}
+	java := toolchain.javaPath
+	javap := toolchain.javapPath
+	progress(options, fmt.Sprintf("preflight java=%d javap=%d required=%d", toolchain.javaMajor, toolchain.javapMajor, requiredJava))
+	downloader := artifact.Downloader{Client: options.HTTPClient}
+	resolver := artifact.Resolver{Client: options.HTTPClient}
+
+	for _, version := range selectedVersions {
+		versionID := version.ID
 		progress(options, "resolve "+versionID)
 		_, metadataSpec, err := resolver.Resolve(ctx, versionID)
 		if err != nil {

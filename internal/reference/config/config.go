@@ -53,6 +53,9 @@ func LoadVersions(configDir string) (map[string]Version, error) {
 		if version.ID == "" || version.Naming == "" {
 			return nil, errors.New("version configuration contains an empty id or naming strategy")
 		}
+		if version.Java < 1 {
+			return nil, fmt.Errorf("version %q has an invalid Java requirement %d", version.ID, version.Java)
+		}
 		if _, exists := result[version.ID]; exists {
 			return nil, fmt.Errorf("duplicate configured version %q", version.ID)
 		}
