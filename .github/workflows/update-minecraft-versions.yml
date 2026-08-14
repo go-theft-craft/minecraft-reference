@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-automation-minecraft-versions
   cancel-in-progress: true
 
 env:
@@ -21,13 +21,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
+      base_sha: ${{ steps.base.outputs.sha }}
       has_candidates: ${{ steps.candidates.outputs.has_candidates }}
       matrix: ${{ steps.candidates.outputs.matrix }}
     steps:
+      - name: Require the main workflow
+        if: github.ref != 'refs/heads/main'
+        run: |
+          printf 'Run this workflow from the main branch.\n' | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           fetch-depth: 0
+
+      - name: Record immutable base commit
+        id: base
+        run: printf 'sha=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Install Devbox
         uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
@@ -69,7 +80,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
+          ref: ${{ needs.discovery.outputs.base_sha }}
 
       - name: Download candidate configuration
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -136,12 +147,13 @@ jobs:
       checks: read
       contents: write
     outputs:
+      base_sha: ${{ needs.discovery.outputs.base_sha }}
       staging_sha: ${{ steps.commit.outputs.sha }}
       compatibility_url: ${{ steps.compatibility.outputs.url }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
+          ref: ${{ needs.discovery.outputs.base_sha }}
           fetch-depth: 0
 
       - name: Download candidate configuration
@@ -285,19 +297,61 @@ jobs:
           path: ${{ runner.temp }}/promotion
 
       - name: Promote tested commit
+        env:
+          BASE_SHA: ${{ needs.acceptance.outputs.base_sha }}
+          STAGING_SHA: ${{ needs.acceptance.outputs.staging_sha }}
         run: |
           set -euo pipefail
+          checked_out_sha="$(git rev-parse HEAD)"
+          staging_parent_sha="$(git rev-parse HEAD^)"
+          remote_main_sha="$(git ls-remote --heads origin refs/heads/main | cut -f1)"
+          remote_staging_sha="$(git ls-remote --heads origin "refs/heads/$STAGING_BRANCH" | cut -f1)"
+          if [ "$checked_out_sha" != "$STAGING_SHA" ] || [ "$remote_staging_sha" != "$STAGING_SHA" ]; then
+            printf 'The staging branch no longer points to the tested commit %s. Restart the updater.\n' "$STAGING_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if [ "$staging_parent_sha" != "$BASE_SHA" ]; then
+            printf 'The staging commit is not based on discovery commit %s. Restart the updater.\n' "$BASE_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if [ "$remote_main_sha" != "$BASE_SHA" ]; then
+            printf 'The main branch moved from %s to %s during the update. Restart the updater from the new main commit.\n' "$BASE_SHA" "$remote_main_sha" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
           expected="$(git ls-remote --heads origin "refs/heads/$UPDATE_BRANCH" | cut -f1)"
           git push --force-with-lease="refs/heads/$UPDATE_BRANCH:$expected" origin "HEAD:refs/heads/$UPDATE_BRANCH"
+          promoted_sha="$(git ls-remote --heads origin "refs/heads/$UPDATE_BRANCH" | cut -f1)"
+          if [ "$promoted_sha" != "$STAGING_SHA" ]; then
+            printf 'The update branch does not point to the tested commit %s.\n' "$STAGING_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
       - name: Create or update pull request
         env:
+          EXPECTED_SHA: ${{ needs.acceptance.outputs.staging_sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           body_path="$RUNNER_TEMP/promotion/pr-body.md"
-          pr_number="$(gh pr list --head "$UPDATE_BRANCH" --base main --state open --json number --jq '.[0].number // empty')"
-          if [ -n "$pr_number" ]; then
+          pulls="$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" \
+            --raw-field state=open \
+            --raw-field base=main \
+            --raw-field "head=$GITHUB_REPOSITORY_OWNER:$UPDATE_BRANCH" \
+            --raw-field per_page=2)"
+          pr_count="$(printf '%s\n' "$pulls" | jq 'length')"
+          if [ "$pr_count" -gt 1 ]; then
+            printf 'Found more than one open pull request for %s:%s.\n' "$GITHUB_REPOSITORY_OWNER" "$UPDATE_BRANCH" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if [ "$pr_count" -eq 1 ]; then
+            pr_number="$(printf '%s\n' "$pulls" | jq -r '.[0].number')"
+            head_repository="$(printf '%s\n' "$pulls" | jq -r '.[0].head.repo.full_name // empty')"
+            head_ref="$(printf '%s\n' "$pulls" | jq -r '.[0].head.ref // empty')"
+            head_sha="$(printf '%s\n' "$pulls" | jq -r '.[0].head.sha // empty')"
+            if [ "$head_repository" != "$GITHUB_REPOSITORY" ] || [ "$head_ref" != "$UPDATE_BRANCH" ] || [ "$head_sha" != "$EXPECTED_SHA" ]; then
+              printf 'Pull request %s does not match repository %s, branch %s, and tested commit %s.\n' "$pr_number" "$GITHUB_REPOSITORY" "$UPDATE_BRANCH" "$EXPECTED_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
             gh pr edit "$pr_number" --title "chore: update Minecraft version catalog" --body-file "$body_path"
             exit 0
           fi
