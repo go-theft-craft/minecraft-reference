@@ -47,3 +47,23 @@ func TestParseJavapAcceptsPackagePrivateInterface(t *testing.T) {
 		t.Fatalf("unexpected symbols: %#v", symbols)
 	}
 }
+
+func TestValidateSymbolAcceptsGeneratedRecordKinds(t *testing.T) {
+	for _, symbol := range []Symbol{
+		{Version: "1.8.9", Side: "client", Owner: "net.minecraft.Game", Kind: "field", Name: "health", Descriptor: "I"},
+		{Version: "1.8.9", Side: "client", Owner: "net.minecraft.Game", Kind: "method", Name: "tick", Descriptor: "()V"},
+		{Version: "1.8.9", Side: "client", Owner: "net.minecraft.Game", Kind: "constructor", Name: "<init>", Descriptor: "(I)V"},
+		{Version: "1.8.9", Side: "client", Owner: "net.minecraft.Game", Kind: "initializer", Name: "<clinit>", Descriptor: "()V"},
+	} {
+		if err := ValidateSymbol(symbol, "1.8.9", "client"); err != nil {
+			t.Fatalf("ValidateSymbol(%#v): %v", symbol, err)
+		}
+	}
+}
+
+func TestValidateSymbolRejectsNonVoidConstructor(t *testing.T) {
+	symbol := Symbol{Version: "1.8.9", Side: "client", Owner: "net.minecraft.Game", Kind: "constructor", Name: "<init>", Descriptor: "()I"}
+	if err := ValidateSymbol(symbol, "1.8.9", "client"); err == nil {
+		t.Fatal("ValidateSymbol accepted a non-void constructor")
+	}
+}

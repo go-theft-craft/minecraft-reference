@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -20,6 +21,8 @@ import (
 	"github.com/go-theft-craft/minecraft-reference/internal/reference/decompile"
 	"github.com/go-theft-craft/minecraft-reference/internal/reference/index"
 )
+
+var safeVersionIDPattern = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z._-]*$`)
 
 // Options configures one non-interactive reference preparation run.
 type Options struct {
@@ -67,17 +70,31 @@ func Prepare(ctx context.Context, options Options) (resultErr error) {
 			return fmt.Errorf("unsupported side %q; use client or server", side)
 		}
 	}
+	versionIDs := unique(options.Versions)
+	if len(versionIDs) == 0 {
+		return errors.New("at least one version is required")
+	}
+	for _, versionID := range versionIDs {
+		if !safeVersionIDPattern.MatchString(versionID) {
+			return fmt.Errorf("unsafe version %q: use one path component containing letters, digits, dots, hyphens, or underscores", versionID)
+		}
+	}
 	referenceDir, err := artifact.ResolveReferenceDir(options.WorkspaceRoot, options.ReferenceDir)
 	if err != nil {
 		return err
+	}
+	requestedSides := unique(options.Sides)
+	for _, versionID := range versionIDs {
+		versionDir := filepath.Join(referenceDir, "versions", versionID)
+		if err := invalidateVersionOutputs(versionDir, requestedSides); err != nil {
+			return fmt.Errorf("invalidate version %s outputs: %w", versionID, err)
+		}
 	}
 	versions, err := config.LoadVersions(options.ConfigDir)
 	if err != nil {
 		return err
 	}
-	versionIDs := unique(options.Versions)
 	selectedVersions := make([]config.Version, 0, len(versionIDs))
-	requestedSides := unique(options.Sides)
 	requiredJava := 0
 	requiredBy := ""
 	for _, versionID := range versionIDs {
@@ -89,12 +106,6 @@ func Prepare(ctx context.Context, options Options) (resultErr error) {
 		if version.Java > requiredJava {
 			requiredJava = version.Java
 			requiredBy = version.ID
-		}
-	}
-	for _, version := range selectedVersions {
-		versionDir := filepath.Join(referenceDir, "versions", version.ID)
-		if err := invalidateVersionOutputs(versionDir, requestedSides); err != nil {
-			return fmt.Errorf("invalidate version %s outputs: %w", version.ID, err)
 		}
 	}
 	tools, err := config.LoadTools(options.ConfigDir)

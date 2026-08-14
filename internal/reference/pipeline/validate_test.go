@@ -25,7 +25,7 @@ func TestValidateOutputRejectsMissingEvidence(t *testing.T) {
 			name:       "named Minecraft class",
 			classes:    []string{"com/example/Minecraft.class"},
 			sources:    []index.SourceFile{{Path: "net/minecraft/Minecraft.java"}},
-			symbols:    []index.Symbol{{Owner: "net.minecraft.Minecraft"}},
+			symbols:    []index.Symbol{validSymbol("net.minecraft.Minecraft", "1.8.9", "client")},
 			validation: config.Validation{MinSources: 1, MinSymbols: 1},
 			want:       []string{"version 1.8.9", "side client", "named classes", "observed 0", "required 1"},
 		},
@@ -33,7 +33,7 @@ func TestValidateOutputRejectsMissingEvidence(t *testing.T) {
 			name:       "Minecraft source",
 			classes:    []string{"net/minecraft/Minecraft.class"},
 			sources:    []index.SourceFile{{Path: "com/example/Minecraft.java"}},
-			symbols:    []index.Symbol{{Owner: "net.minecraft.Minecraft"}},
+			symbols:    []index.Symbol{validSymbol("net.minecraft.Minecraft", "1.8.9", "client")},
 			validation: config.Validation{MinSources: 1, MinSymbols: 1},
 			want:       []string{"version 1.8.9", "side client", "Minecraft source records", "observed 0", "required 1"},
 		},
@@ -41,7 +41,7 @@ func TestValidateOutputRejectsMissingEvidence(t *testing.T) {
 			name:       "Minecraft symbol owner",
 			classes:    []string{"net/minecraft/Minecraft.class"},
 			sources:    []index.SourceFile{{Path: "net/minecraft/Minecraft.java"}},
-			symbols:    []index.Symbol{{Owner: "com.example.Minecraft"}},
+			symbols:    []index.Symbol{validSymbol("com.example.Minecraft", "1.8.9", "client")},
 			validation: config.Validation{MinSources: 1, MinSymbols: 1},
 			want:       []string{"version 1.8.9", "side client", "Minecraft symbol records", "observed 0", "required 1"},
 		},
@@ -49,7 +49,7 @@ func TestValidateOutputRejectsMissingEvidence(t *testing.T) {
 			name:       "minimum sources",
 			classes:    []string{"net/minecraft/Minecraft.class"},
 			sources:    []index.SourceFile{{Path: "net/minecraft/Minecraft.java"}},
-			symbols:    []index.Symbol{{Owner: "net.minecraft.Minecraft"}},
+			symbols:    []index.Symbol{validSymbol("net.minecraft.Minecraft", "1.8.9", "client")},
 			validation: config.Validation{MinSources: 2, MinSymbols: 1},
 			want:       []string{"version 1.8.9", "side client", "source records", "observed 1", "required 2"},
 		},
@@ -57,7 +57,7 @@ func TestValidateOutputRejectsMissingEvidence(t *testing.T) {
 			name:       "minimum symbols",
 			classes:    []string{"net/minecraft/Minecraft.class"},
 			sources:    []index.SourceFile{{Path: "net/minecraft/Minecraft.java"}},
-			symbols:    []index.Symbol{{Owner: "net.minecraft.Minecraft"}},
+			symbols:    []index.Symbol{validSymbol("net.minecraft.Minecraft", "1.8.9", "client")},
 			validation: config.Validation{MinSources: 1, MinSymbols: 2},
 			want:       []string{"version 1.8.9", "side client", "symbol records", "observed 1", "required 2"},
 		},
@@ -65,7 +65,7 @@ func TestValidateOutputRejectsMissingEvidence(t *testing.T) {
 			name:       "required final class segment",
 			classes:    []string{"net/minecraft/src/Game.class"},
 			sources:    []index.SourceFile{{Path: "net/minecraft/Game.java"}},
-			symbols:    []index.Symbol{{Owner: "net.minecraft.Game"}},
+			symbols:    []index.Symbol{validSymbol("net.minecraft.Game", "1.8.9", "client")},
 			validation: config.Validation{MinSources: 1, MinSymbols: 1, RequiredClasses: []string{"Minecraft"}},
 			want:       []string{"version 1.8.9", "side client", "required class Minecraft", "observed 0", "required 1"},
 		},
@@ -73,7 +73,7 @@ func TestValidateOutputRejectsMissingEvidence(t *testing.T) {
 			name:       "required MinecraftServer",
 			classes:    []string{"net/minecraft/server/GameServer.class"},
 			sources:    []index.SourceFile{{Path: "net/minecraft/server/GameServer.java"}},
-			symbols:    []index.Symbol{{Owner: "net.minecraft.server.GameServer"}},
+			symbols:    []index.Symbol{validSymbol("net.minecraft.server.GameServer", "1.8.9", "client")},
 			validation: config.Validation{MinSources: 1, MinSymbols: 1, RequiredClasses: []string{"MinecraftServer"}},
 			want:       []string{"version 1.8.9", "side client", "required class MinecraftServer", "observed 0", "required 1"},
 		},
@@ -100,12 +100,131 @@ func TestValidateOutputRejectsMissingEvidence(t *testing.T) {
 	}
 }
 
+func TestValidateOutputRejectsMalformedSymbolFields(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*index.Symbol)
+		want   string
+	}{
+		{name: "empty kind", mutate: func(symbol *index.Symbol) { symbol.Kind = "" }, want: "kind"},
+		{name: "unknown kind", mutate: func(symbol *index.Symbol) { symbol.Kind = "property" }, want: "kind"},
+		{name: "empty name", mutate: func(symbol *index.Symbol) { symbol.Name = "" }, want: "name"},
+		{name: "malformed descriptor", mutate: func(symbol *index.Symbol) { symbol.Descriptor = "not-a-descriptor" }, want: "descriptor"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			symbol := validSymbol("net.minecraft.Minecraft", "1.8.9", "client")
+			test.mutate(&symbol)
+			fixture := newValidationFixture(
+				t,
+				[]string{"net/minecraft/Minecraft.class"},
+				[]index.SourceFile{{Path: "net/minecraft/Minecraft.java"}},
+				[]index.Symbol{symbol, symbol},
+			)
+			_, err := validateOutput(validationOptions{
+				Version: config.Version{ID: "1.8.9", Family: "1.8", Java: 8, Naming: "mcp"},
+				Side:    "client", Validation: config.Validation{MinSources: 1, MinSymbols: 2},
+				NamedJar: fixture.jar, SourcesIndex: fixture.sources, SymbolsIndex: fixture.symbols,
+				ReportPath: fixture.report, JavaMajor: 25, JavapMajor: 25,
+			})
+			if err == nil || !strings.Contains(err.Error(), "symbol record 1") || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("got %v, want malformed %s error", err, test.want)
+			}
+		})
+	}
+}
+
+func TestValidateOutputRejectsRepeatedOwnerOnlySymbols(t *testing.T) {
+	fixture := newValidationFixture(
+		t,
+		[]string{"net/minecraft/Foo.class"},
+		[]index.SourceFile{{Path: "net/minecraft/Foo.java"}},
+		[]index.Symbol{{Owner: "net.minecraft.Foo"}, {Owner: "net.minecraft.Foo"}},
+	)
+	_, err := validateOutput(validationOptions{
+		Version: config.Version{ID: "1.8.9", Family: "1.8", Java: 8, Naming: "mcp"},
+		Side:    "client", Validation: config.Validation{MinSources: 1, MinSymbols: 2},
+		NamedJar: fixture.jar, SourcesIndex: fixture.sources, SymbolsIndex: fixture.symbols,
+		ReportPath: fixture.report, JavaMajor: 25, JavapMajor: 25,
+	})
+	if err == nil || !strings.Contains(err.Error(), "symbol record 1") {
+		t.Fatalf("got %v, want malformed owner-only symbol error", err)
+	}
+}
+
+func TestValidateOutputRejectsSymbolFromDifferentRun(t *testing.T) {
+	for _, field := range []string{"version", "side"} {
+		t.Run(field, func(t *testing.T) {
+			symbol := validSymbol("net.minecraft.Minecraft", "1.8.9", "client")
+			if field == "version" {
+				symbol.Version = "1.8.8"
+			} else {
+				symbol.Side = "server"
+			}
+			fixture := newValidationFixture(
+				t,
+				[]string{"net/minecraft/Minecraft.class"},
+				[]index.SourceFile{{Path: "net/minecraft/Minecraft.java"}},
+				[]index.Symbol{symbol},
+			)
+			_, err := validateOutput(validationOptions{
+				Version: config.Version{ID: "1.8.9", Family: "1.8", Java: 8, Naming: "mcp"},
+				Side:    "client", Validation: config.Validation{MinSources: 1, MinSymbols: 1},
+				NamedJar: fixture.jar, SourcesIndex: fixture.sources, SymbolsIndex: fixture.symbols,
+				ReportPath: fixture.report, JavaMajor: 25, JavapMajor: 25,
+			})
+			if err == nil || !strings.Contains(err.Error(), "symbol record 1") || !strings.Contains(err.Error(), field) {
+				t.Fatalf("got %v, want mismatched %s error", err, field)
+			}
+		})
+	}
+}
+
+func TestValidateOutputRejectsDottedMinecraftZIPPath(t *testing.T) {
+	fixture := newValidationFixture(
+		t,
+		[]string{"net.minecraft.Minecraft.class"},
+		[]index.SourceFile{{Path: "net/minecraft/Minecraft.java"}},
+		[]index.Symbol{validSymbol("net.minecraft.Minecraft", "1.8.9", "client")},
+	)
+	_, err := validateOutput(validationOptions{
+		Version: config.Version{ID: "1.8.9", Family: "1.8", Java: 8, Naming: "mcp"},
+		Side:    "client", Validation: config.Validation{MinSources: 1, MinSymbols: 1, RequiredClasses: []string{"Minecraft"}},
+		NamedJar: fixture.jar, SourcesIndex: fixture.sources, SymbolsIndex: fixture.symbols,
+		ReportPath: fixture.report, JavaMajor: 25, JavapMajor: 25,
+	})
+	if err == nil || !strings.Contains(err.Error(), "named classes") || !strings.Contains(err.Error(), "observed 0") {
+		t.Fatalf("got %v, want invalid ZIP class path error", err)
+	}
+}
+
+func TestValidateOutputAcceptsSlashMinecraftZIPPath(t *testing.T) {
+	fixture := newValidationFixture(
+		t,
+		[]string{"net/minecraft/Minecraft.class"},
+		[]index.SourceFile{{Path: "net/minecraft/Minecraft.java"}},
+		[]index.Symbol{validSymbol("net.minecraft.Minecraft", "1.8.9", "client")},
+	)
+	report, err := validateOutput(validationOptions{
+		Version: config.Version{ID: "1.8.9", Family: "1.8", Java: 8, Naming: "mcp"},
+		Side:    "client", Validation: config.Validation{MinSources: 1, MinSymbols: 1, RequiredClasses: []string{"Minecraft"}},
+		NamedJar: fixture.jar, SourcesIndex: fixture.sources, SymbolsIndex: fixture.symbols,
+		ReportPath: fixture.report, JavaMajor: 25, JavapMajor: 25,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Passed || report.NamedClasses != 1 {
+		t.Fatalf("unexpected report: %#v", report)
+	}
+}
+
 func TestValidateOutputWritesDeterministicPrivacySafeReport(t *testing.T) {
 	fixture := newValidationFixture(
 		t,
 		[]string{"net/minecraft/src/Minecraft.class", "net/minecraft/world/World.class", "com/example/Other.class"},
 		[]index.SourceFile{{Path: "net/minecraft/src/Minecraft.java"}, {Path: "net/minecraft/world/World.java"}},
-		[]index.Symbol{{Owner: "net.minecraft.src.Minecraft"}, {Owner: "net.minecraft.world.World"}},
+		[]index.Symbol{validSymbol("net.minecraft.src.Minecraft", "1.8.9", "client"), validSymbol("net.minecraft.world.World", "1.8.9", "client")},
 	)
 	options := validationOptions{
 		Version: config.Version{ID: "1.8.9", Family: "1.8", Java: 8, Naming: "mcp"},
@@ -164,7 +283,7 @@ func TestValidateOutputStreamsLargeIndexRecords(t *testing.T) {
 		t,
 		[]string{"net/minecraft/server/MinecraftServer.class"},
 		[]index.SourceFile{{Path: "net/minecraft/server/MinecraftServer.java"}},
-		[]index.Symbol{{Owner: "net.minecraft.server.MinecraftServer", Declaration: largeDeclaration}},
+		[]index.Symbol{{Version: "26.1.2", Side: "server", Owner: "net.minecraft.server.MinecraftServer", Kind: "method", Name: "tick", Descriptor: "()V", Declaration: largeDeclaration}},
 	)
 	_, err := validateOutput(validationOptions{
 		Version: config.Version{ID: "26.1.2", Family: "26.1", Java: 25, Naming: "identity"},
@@ -182,7 +301,7 @@ func TestValidateOutputRemovesStaleReportBeforeFailure(t *testing.T) {
 		t,
 		[]string{"com/example/Game.class"},
 		[]index.SourceFile{{Path: "net/minecraft/Game.java"}},
-		[]index.Symbol{{Owner: "net.minecraft.Game"}},
+		[]index.Symbol{validSymbol("net.minecraft.Game", "1.8.9", "client")},
 	)
 	if err := os.MkdirAll(filepath.Dir(fixture.report), 0o750); err != nil {
 		t.Fatal(err)
@@ -202,6 +321,10 @@ func TestValidateOutputRemovesStaleReportBeforeFailure(t *testing.T) {
 	if _, statErr := os.Stat(fixture.report); !os.IsNotExist(statErr) {
 		t.Fatalf("stale report remains after failed validation: %v", statErr)
 	}
+}
+
+func validSymbol(owner, version, side string) index.Symbol {
+	return index.Symbol{Version: version, Side: side, Owner: owner, Kind: "method", Name: "tick", Descriptor: "()V", Declaration: "public void tick();"}
 }
 
 type validationFixture struct {

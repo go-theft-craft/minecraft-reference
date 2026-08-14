@@ -65,6 +65,12 @@ func remapDescriptor(descriptor string, classes map[string]string, method bool) 
 	return result, nil
 }
 
+// ValidateDescriptor reports whether descriptor is a complete JVM field or method descriptor.
+func ValidateDescriptor(descriptor string, method bool) error {
+	_, err := remapDescriptor(descriptor, nil, method)
+	return err
+}
+
 type descriptorParser struct {
 	descriptor string
 	classes    map[string]string

@@ -46,13 +46,13 @@ func validateOutput(options validationOptions) (CompatibilityReport, error) {
 		return CompatibilityReport{}, fmt.Errorf("invalidate compatibility report: %w", err)
 	}
 
-	classes, err := archive.ListClasses(options.NamedJar)
+	classes, err := archive.ListClassPaths(options.NamedJar)
 	if err != nil {
 		return CompatibilityReport{}, validationError(options, "read named classes", err)
 	}
 	namedClasses := make([]string, 0, len(classes))
 	for _, class := range classes {
-		if strings.HasPrefix(class, "net.minecraft.") {
+		if strings.HasPrefix(class, "net/minecraft/") {
 			namedClasses = append(namedClasses, class)
 		}
 	}
@@ -73,13 +73,11 @@ func validateOutput(options validationOptions) (CompatibilityReport, error) {
 		return CompatibilityReport{}, observedError(options, "source records", sourceRecords, options.Validation.MinSources)
 	}
 
-	symbolRecords, minecraftSymbols, err := scanJSONLines[index.Symbol](options.SymbolsIndex, func(symbol index.Symbol) bool {
-		return strings.HasPrefix(symbol.Owner, "net.minecraft.")
-	})
+	symbolRecords, err := scanSymbolLines(options.SymbolsIndex, options.Version.ID, options.Side)
 	if err != nil {
 		return CompatibilityReport{}, validationError(options, "read symbol index", err)
 	}
-	if minecraftSymbols == 0 {
+	if symbolRecords == 0 {
 		return CompatibilityReport{}, observedError(options, "Minecraft symbol records", 0, 1)
 	}
 	if symbolRecords < options.Validation.MinSymbols {
@@ -88,7 +86,7 @@ func validateOutput(options validationOptions) (CompatibilityReport, error) {
 
 	classSegments := make(map[string]struct{}, len(namedClasses))
 	for _, class := range namedClasses {
-		segment := class[strings.LastIndexByte(class, '.')+1:]
+		segment := class[strings.LastIndexByte(class, '/')+1:]
 		classSegments[segment] = struct{}{}
 	}
 	for _, required := range options.Validation.RequiredClasses {
@@ -116,6 +114,35 @@ func validateOutput(options validationOptions) (CompatibilityReport, error) {
 	return report, nil
 }
 
+func scanSymbolLines(path, version, side string) (int, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = file.Close() }()
+
+	count := 0
+	recordNumber := 0
+	scanner := newIndexScanner(file)
+	for scanner.Scan() {
+		recordNumber++
+		var symbol index.Symbol
+		if err := json.Unmarshal(scanner.Bytes(), &symbol); err != nil {
+			return 0, fmt.Errorf("decode symbol record %d: %w", recordNumber, err)
+		}
+		if err := index.ValidateSymbol(symbol, version, side); err != nil {
+			return 0, fmt.Errorf("symbol record %d: %w", recordNumber, err)
+		}
+		if strings.HasPrefix(symbol.Owner, "net.minecraft.") {
+			count++
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func scanJSONLines[T any](path string, matches func(T) bool) (int, int, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -125,8 +152,7 @@ func scanJSONLines[T any](path string, matches func(T) bool) (int, int, error) {
 
 	count := 0
 	matching := 0
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 64<<10), maximumIndexRecordSize)
+	scanner := newIndexScanner(file)
 	for scanner.Scan() {
 		var record T
 		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
@@ -141,6 +167,12 @@ func scanJSONLines[T any](path string, matches func(T) bool) (int, int, error) {
 		return 0, 0, err
 	}
 	return count, matching, nil
+}
+
+func newIndexScanner(file *os.File) *bufio.Scanner {
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 64<<10), maximumIndexRecordSize)
+	return scanner
 }
 
 func observedError(options validationOptions, evidence string, observed, required int) error {
