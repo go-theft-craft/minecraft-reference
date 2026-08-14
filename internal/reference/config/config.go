@@ -230,6 +230,9 @@ func validateMCPMapping(version Version) error {
 
 func familyParts(family string) ([]int, error) {
 	parts := strings.Split(family, ".")
+	if len(parts) != 2 {
+		return nil, errors.New("must contain exactly two numeric components")
+	}
 	result := make([]int, len(parts))
 	for index, part := range parts {
 		if part == "" {

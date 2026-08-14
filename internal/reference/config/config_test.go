@@ -125,8 +125,8 @@ func TestReadVersionFileRejectsDuplicateIDs(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "versions.json")
 	data := []byte(`{
   "versions": [
-    {"id":"one","family":"1","java":8,"naming":"identity","sides":{"client":{"min_sources":1,"min_symbols":1}}},
-    {"id":"one","family":"2","java":8,"naming":"identity","sides":{"client":{"min_sources":1,"min_symbols":1}}}
+    {"id":"one","family":"1.0","java":8,"naming":"identity","sides":{"client":{"min_sources":1,"min_symbols":1}}},
+    {"id":"one","family":"2.0","java":8,"naming":"identity","sides":{"client":{"min_sources":1,"min_symbols":1}}}
   ]
 }`)
 	if err := os.WriteFile(path, data, 0o600); err != nil {
@@ -138,10 +138,27 @@ func TestReadVersionFileRejectsDuplicateIDs(t *testing.T) {
 	}
 }
 
+func TestReadVersionFileRejectsInvalidFamilyShape(t *testing.T) {
+	const entry = `{"versions":[{"id":"test","family":"26.1","java":25,"naming":"identity","sides":{"client":{"min_sources":1,"min_symbols":1}}}]}`
+	for _, family := range []string{"26", "26.1.2"} {
+		t.Run(family, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "versions.json")
+			data := strings.Replace(entry, `"26.1"`, `"`+family+`"`, 1)
+			if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := ReadVersionFile(path)
+			if err == nil || !strings.Contains(err.Error(), `version "test" field family`) {
+				t.Fatalf("got %v", err)
+			}
+		})
+	}
+}
+
 func TestWriteVersionFileSortsByNumericFamily(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "versions.json")
 	versions := []Version{
-		{ID: "26.1.2", Family: "26", Java: 25, Naming: "identity", Sides: map[string]Validation{"client": {MinSources: 1, MinSymbols: 1}}},
+		{ID: "26.1.2", Family: "26.1", Java: 25, Naming: "identity", Sides: map[string]Validation{"client": {MinSources: 1, MinSymbols: 1}}},
 		{ID: "1.8.9", Family: "1.8", Java: 8, Naming: "mcp", Mapping: &Mapping{Format: "tiny-v1", Tool: "mcp-1.8.9-tiny"}, Sides: map[string]Validation{"client": {MinSources: 1, MinSymbols: 1}}},
 	}
 	if err := WriteVersionFile(path, versions); err != nil {
@@ -151,7 +168,7 @@ func TestWriteVersionFileSortsByNumericFamily(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[0].Family != "1.8" || got[1].Family != "26" {
+	if len(got) != 2 || got[0].Family != "1.8" || got[1].Family != "26.1" {
 		t.Fatalf("unexpected order: %#v", got)
 	}
 }
