@@ -56,7 +56,7 @@
 - [x] **Step 1:** Define reproducible builds with version metadata.
 - [x] **Step 2:** Add Task targets for config validation, snapshots, and tagged releases.
 - [x] **Step 3:** Add a tag-triggered GitHub Actions workflow with concurrency control.
-- [ ] **Step 4:** Run `devbox run -- task verify` and a GoReleaser snapshot.
+- [x] **Step 4:** Run `devbox run -- task verify` and a GoReleaser snapshot.
 
 ### Task 3: Reduce the simulation repository to its own responsibility
 

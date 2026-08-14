@@ -80,9 +80,10 @@ tasks:
       - govulncheck ./...
 
   secrets:
-    desc: Scan project files except generated local workspaces
+    desc: Scan project files and Git history for secrets
     cmds:
       - gitleaks dir --config .gitleaks.toml --no-banner --redact --verbose .
+      - gitleaks git --config .gitleaks.toml --no-banner --redact --verbose --log-opts="--all" .
 
   secrets:staged:
     desc: Scan staged changes for secrets
