@@ -1,7 +1,7 @@
 # minecraft-reference
-<center>
-<img src="docs/assets/logo.png" width="250" alt="minecraft-reference logo">
-</center>
+<p align="center">
+  <img src="docs/assets/logo.png" width="250" alt="minecraft-reference logo">
+</p>
 
 `mcreference` prepares local Java Edition reference material for independent
 Minecraft implementations.
