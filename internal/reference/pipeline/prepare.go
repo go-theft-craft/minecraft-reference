@@ -45,7 +45,17 @@ type Lock struct {
 }
 
 // Prepare downloads, names, decompiles, and indexes requested artifacts.
-func Prepare(ctx context.Context, options Options) error {
+func Prepare(ctx context.Context, options Options) (resultErr error) {
+	var activeVersionDir string
+	var activeSides []string
+	defer func() {
+		if resultErr == nil || activeVersionDir == "" {
+			return
+		}
+		if err := invalidateVersionOutputs(activeVersionDir, activeSides); err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("invalidate failed version outputs: %w", err))
+		}
+	}()
 	if len(options.Versions) == 0 {
 		return errors.New("at least one version is required")
 	}
@@ -65,12 +75,9 @@ func Prepare(ctx context.Context, options Options) error {
 	if err != nil {
 		return err
 	}
-	tools, err := config.LoadTools(options.ConfigDir)
-	if err != nil {
-		return err
-	}
 	versionIDs := unique(options.Versions)
 	selectedVersions := make([]config.Version, 0, len(versionIDs))
+	requestedSides := unique(options.Sides)
 	requiredJava := 0
 	requiredBy := ""
 	for _, versionID := range versionIDs {
@@ -83,6 +90,16 @@ func Prepare(ctx context.Context, options Options) error {
 			requiredJava = version.Java
 			requiredBy = version.ID
 		}
+	}
+	for _, version := range selectedVersions {
+		versionDir := filepath.Join(referenceDir, "versions", version.ID)
+		if err := invalidateVersionOutputs(versionDir, requestedSides); err != nil {
+			return fmt.Errorf("invalidate version %s outputs: %w", version.ID, err)
+		}
+	}
+	tools, err := config.LoadTools(options.ConfigDir)
+	if err != nil {
+		return err
 	}
 	progress(options, "preflight java and javap")
 	toolchain, err := preflightJava(ctx, options.Java, options.Javap, requiredJava, requiredBy)
@@ -97,6 +114,8 @@ func Prepare(ctx context.Context, options Options) error {
 
 	for _, version := range selectedVersions {
 		versionID := version.ID
+		activeVersionDir = filepath.Join(referenceDir, "versions", versionID)
+		activeSides = requestedSides
 		progress(options, "resolve "+versionID)
 		_, metadataSpec, err := resolver.Resolve(ctx, versionID)
 		if err != nil {
@@ -141,7 +160,7 @@ func Prepare(ctx context.Context, options Options) error {
 		}
 		lock.Artifacts = append(lock.Artifacts, result)
 
-		for _, side := range unique(options.Sides) {
+		for _, side := range requestedSides {
 			download, ok := metadata.Downloads[side]
 			if !ok {
 				return fmt.Errorf("version %s has no %s download", versionID, side)
@@ -192,10 +211,26 @@ func Prepare(ctx context.Context, options Options) error {
 			if err := index.GenerateSource(sourceDir, filepath.Join(indexDir, "sources.jsonl")); err != nil {
 				return err
 			}
+			progress(options, fmt.Sprintf("validate %s %s", versionID, side))
+			if _, err := validateOutput(validationOptions{
+				Version:      version,
+				Side:         side,
+				Validation:   version.Sides[side],
+				NamedJar:     analysisJar,
+				SourcesIndex: filepath.Join(indexDir, "sources.jsonl"),
+				SymbolsIndex: filepath.Join(indexDir, "symbols.jsonl"),
+				ReportPath:   filepath.Join(sideDir, "compatibility.json"),
+				JavaMajor:    toolchain.javaMajor,
+				JavapMajor:   toolchain.javapMajor,
+			}); err != nil {
+				return err
+			}
 		}
 		if err := writeJSON(filepath.Join(versionDir, "manifest.lock.json"), lock); err != nil {
 			return err
 		}
+		activeVersionDir = ""
+		activeSides = nil
 	}
 	return nil
 }
@@ -303,17 +338,50 @@ func appendArtifactResults(existing []artifact.DownloadResult, additions ...arti
 	return existing
 }
 
+func invalidateVersionOutputs(versionDir string, sides []string) error {
+	if err := removeIfPresent(filepath.Join(versionDir, "manifest.lock.json")); err != nil {
+		return err
+	}
+	for _, side := range sides {
+		if err := removeIfPresent(filepath.Join(versionDir, side, "compatibility.json")); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func writeJSON(path string, value any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return err
+		return fmt.Errorf("create JSON directory: %w", err)
 	}
 	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("encode %s: %w", path, err)
 	}
 	data = append(data, '\n')
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".json-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temporary JSON file: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	defer func() {
+		_ = temporary.Close()
+		_ = os.Remove(temporaryPath)
+	}()
+	if err := temporary.Chmod(0o600); err != nil {
+		return fmt.Errorf("set temporary JSON permissions: %w", err)
+	}
+	if _, err := temporary.Write(data); err != nil {
+		return fmt.Errorf("write temporary JSON file: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		return fmt.Errorf("sync temporary JSON file: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("close temporary JSON file: %w", err)
+	}
+	if err := os.Rename(temporaryPath, path); err != nil {
+		return fmt.Errorf("replace %s: %w", path, err)
 	}
 	return nil
 }
