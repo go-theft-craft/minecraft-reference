@@ -122,6 +122,21 @@ func TestSubcommandHelpExitsSuccessfully(t *testing.T) {
 	}
 }
 
+func TestHelpDocumentsCandidateAcceptanceWorkflow(t *testing.T) {
+	const acceptCommand = "mcversionupdate accept --config candidate.json --reports reference/compatibility --output versions.json"
+	if !strings.Contains(usageText, acceptCommand) {
+		t.Fatalf("top-level help does not contain %q:\n%s", acceptCommand, usageText)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := run(context.Background(), []string{"accept", "--help"}, &stdout, &stderr, runDependencies{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stderr.String(), acceptCommand) {
+		t.Fatalf("accept help does not contain %q:\n%s", acceptCommand, stderr.String())
+	}
+}
+
 func TestDiscoverCommandWritesEmptyCandidateListWithoutMetadataRequests(t *testing.T) {
 	root := t.TempDir()
 	requests := make([]string, 0)

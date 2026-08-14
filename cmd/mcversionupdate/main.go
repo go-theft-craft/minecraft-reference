@@ -25,7 +25,7 @@ const usageText = `mcversionupdate promotes compatibility evidence into the vers
 Usage:
   mcversionupdate discover --output candidate.json
   mcversionupdate matrix --config candidate.json
-  mcversionupdate accept --config versions.json --reports reference/work/versions --output versions.json
+  mcversionupdate accept --config candidate.json --reports reference/compatibility --output versions.json
   mcversionupdate readme --config versions.json --file README.md --write
 
 Commands:
@@ -214,15 +214,15 @@ func runAccept(arguments []string, stdout, stderr io.Writer, dependencies runDep
 	set.SetOutput(stderr)
 	set.Usage = func() {
 		_, _ = fmt.Fprintln(stderr, `Usage:
-  mcversionupdate accept --config <versions.json> --reports <directory> --output <versions.json>
+  mcversionupdate accept --config <candidate.json> --reports <directory> --output <versions.json>
 
 Options:`)
 		set.PrintDefaults()
 		_, _ = fmt.Fprintln(stderr, `
 Example:
-  mcversionupdate accept --config versions.json --reports reference/work/versions --output versions.json`)
+  mcversionupdate accept --config candidate.json --reports reference/compatibility --output versions.json`)
 	}
-	configPath := set.String("config", "", "source versions.json file (required)")
+	configPath := set.String("config", "", "source candidate or versions configuration file (required)")
 	reportsPath := set.String("reports", "", "directory containing compatibility.json reports (required)")
 	outputPath := set.String("output", "", "destination versions.json file (required)")
 	if err := parseFlags(set, arguments, "accept"); err != nil {
