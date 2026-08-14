@@ -29,3 +29,37 @@ func TestRestrictedReferenceArtifactsAreNotTracked(t *testing.T) {
 		}
 	}
 }
+
+func TestCustomReferenceGeneratedPathsAreIgnored(t *testing.T) {
+	repository := filepath.Join("..", "..")
+	tests := []struct {
+		path        string
+		wantIgnored bool
+	}{
+		{path: "custom/reference/cache/tools/mcp.zip", wantIgnored: true},
+		{path: "custom/reference/versions/1.10.2/mappings/fields.csv", wantIgnored: true},
+		{path: "custom/reference/versions/1.20.6/mappings/server.txt", wantIgnored: true},
+		{path: "custom/reference/docs/server.txt", wantIgnored: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.path, func(t *testing.T) {
+			command := exec.Command("git", "check-ignore", "--quiet", "--", test.path)
+			command.Dir = repository
+			err := command.Run()
+			if test.wantIgnored {
+				if err != nil {
+					t.Fatalf("expected %q to be ignored: %v", test.path, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected %q not to be ignored", test.path)
+			}
+			exitError, ok := err.(*exec.ExitError)
+			if !ok || exitError.ExitCode() != 1 {
+				t.Fatalf("git check-ignore %q: %v", test.path, err)
+			}
+		})
+	}
+}
