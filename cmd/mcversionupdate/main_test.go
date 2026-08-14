@@ -212,6 +212,11 @@ func TestDiscoverCommandKeepsUnavailableJDKAsCandidateMetadata(t *testing.T) {
 
 func TestMatrixCommandPrintsCandidateSidesAsGitHubMatrix(t *testing.T) {
 	root := t.TempDir()
+	legacy := config.Version{
+		ID: "1.0", Family: "1.0", Java: 8, Naming: "mcp",
+		Mapping: &config.Mapping{Format: "tiny-v1", Tool: "legacy"},
+		Sides:   map[string]config.Validation{"client": {MinSources: 1, MinSymbols: 1}},
+	}
 	version := config.Version{
 		ID: "26.2", Family: "26.2", Java: 25, Naming: "identity",
 		Sides: map[string]config.Validation{
@@ -219,14 +224,14 @@ func TestMatrixCommandPrintsCandidateSidesAsGitHubMatrix(t *testing.T) {
 			"client": {MinSources: 1, MinSymbols: 1},
 		},
 	}
-	if err := catalog.WriteCandidateFile(filepath.Join(root, "candidate.json"), []config.Version{version}, []catalog.Candidate{{Family: "26.2", New: version}}); err != nil {
+	if err := catalog.WriteCandidateFile(filepath.Join(root, "candidate.json"), []config.Version{legacy, version}, []catalog.Candidate{{Family: "1.0", New: legacy}, {Family: "26.2", New: version}}); err != nil {
 		t.Fatal(err)
 	}
 	var stdout, stderr bytes.Buffer
 	if err := run(context.Background(), []string{"matrix", "--config", "candidate.json"}, &stdout, &stderr, runDependencies{Root: root}); err != nil {
 		t.Fatal(err)
 	}
-	const want = `{"include":[{"version":"26.2","family":"26.2","side":"client","java":25},{"version":"26.2","family":"26.2","side":"server","java":25}]}` + "\n"
+	const want = `{"include":[{"version":"1.0","family":"1.0","side":"client","java":17},{"version":"26.2","family":"26.2","side":"client","java":25},{"version":"26.2","family":"26.2","side":"server","java":25}]}` + "\n"
 	if stdout.String() != want {
 		t.Fatalf("got %q, want %q", stdout.String(), want)
 	}
@@ -267,7 +272,7 @@ func TestAcceptCommandAcceptsOnlyChangedCandidatesAndPreservesCatalog(t *testing
 func TestReadmeCommandWritesAndChecksGeneratedTable(t *testing.T) {
 	root := t.TempDir()
 	version := config.Version{
-		ID: "1.0", Family: "1.0", Java: 8, Naming: "mcp",
+		ID: "1.0", Family: "1.0", Java: 8, ReleaseDate: "2011-11-17", VerifiedDate: "2026-08-14", Naming: "mcp",
 		Mapping: &config.Mapping{Format: "tiny-v1", Tool: "legacy"},
 		Sides:   map[string]config.Validation{"client": {MinSources: 1, MinSymbols: 1}},
 	}
@@ -287,7 +292,7 @@ func TestReadmeCommandWritesAndChecksGeneratedTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "| 1.0 | `1.0` | 8 | Pinned MCP mappings | client |") {
+	if !strings.Contains(string(data), "| 1.0 | `1.0` | 2011-11-17 | 2026-08-14 | 17 | Pinned MCP mappings | client |") {
 		t.Fatalf("unexpected README: %s", data)
 	}
 	if err := os.WriteFile(filepath.Join(root, "README.md"), []byte(readme), 0o600); err != nil {

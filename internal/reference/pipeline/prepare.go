@@ -108,6 +108,7 @@ func Prepare(ctx context.Context, options Options) (resultErr error) {
 			requiredBy = version.ID
 		}
 	}
+	requiredJava = config.EffectiveJavaMajor(requiredJava)
 	tools, err := config.LoadTools(options.ConfigDir)
 	if err != nil {
 		return err

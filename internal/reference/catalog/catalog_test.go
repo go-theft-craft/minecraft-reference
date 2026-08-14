@@ -59,12 +59,13 @@ func TestDiscoverSelectsNewestStableReleaseByReleaseTime(t *testing.T) {
 	}
 	wantFamilies := []string{"1.20", "1.21", "26.1", "26.2"}
 	wantVersions := []string{"1.20.6", "1.21", "26.1.2", "26.2"}
+	wantReleaseDates := []string{"2026-08-03", "2026-08-05", "2026-08-07", "2026-08-01"}
 	if len(candidates) != len(wantFamilies) {
 		t.Fatalf("got %d candidates, want %d: %#v", len(candidates), len(wantFamilies), candidates)
 	}
 	for index, family := range wantFamilies {
 		candidate := candidates[index]
-		if candidate.Family != family || candidate.New.Family != family || candidate.New.ID != wantVersions[index] || candidate.New.Java != 99 || candidate.New.Naming != "mojang" {
+		if candidate.Family != family || candidate.New.Family != family || candidate.New.ID != wantVersions[index] || candidate.New.Java != 99 || candidate.New.Naming != "mojang" || candidate.New.ReleaseDate != wantReleaseDates[index] {
 			t.Errorf("candidate %d: %#v", index, candidate)
 		}
 		if !candidate.New.SupportsSide("client") || !candidate.New.SupportsSide("server") {

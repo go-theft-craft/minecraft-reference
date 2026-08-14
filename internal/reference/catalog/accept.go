@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"time"
 
 	"github.com/go-theft-craft/minecraft-reference/internal/reference/config"
 	"github.com/go-theft-craft/minecraft-reference/internal/reference/pipeline"
@@ -17,6 +18,11 @@ type reportKey struct {
 
 // Accept derives conservative validation limits from passing compatibility reports.
 func Accept(versions []config.Version, reports []pipeline.CompatibilityReport) ([]config.Version, error) {
+	return AcceptAt(versions, reports, time.Now())
+}
+
+// AcceptAt derives validation limits and records the UTC verification date.
+func AcceptAt(versions []config.Version, reports []pipeline.CompatibilityReport, verifiedAt time.Time) ([]config.Version, error) {
 	reportsBySide := make(map[reportKey]pipeline.CompatibilityReport, len(reports))
 	for _, report := range reports {
 		key := reportKey{version: report.Version, side: report.Side}
@@ -48,6 +54,7 @@ func Accept(versions []config.Version, reports []pipeline.CompatibilityReport) (
 			validation.RequiredClasses = append([]string(nil), validation.RequiredClasses...)
 			updated.Sides[side] = validation
 		}
+		updated.VerifiedDate = verifiedAt.UTC().Format(time.DateOnly)
 		accepted = append(accepted, updated)
 	}
 	return accepted, nil
@@ -67,11 +74,12 @@ func validateReport(version config.Version, side string, validation config.Valid
 	if report.JavaMajor != report.JavapMajor {
 		return fmt.Errorf("%s Java major %d does not match javap major %d", label, report.JavaMajor, report.JavapMajor)
 	}
-	if report.JavaMajor < version.Java {
-		return fmt.Errorf("%s Java major %d is below configured requirement %d", label, report.JavaMajor, version.Java)
+	requiredJava := config.EffectiveJavaMajor(version.Java)
+	if report.JavaMajor < requiredJava {
+		return fmt.Errorf("%s Java major %d is below effective requirement %d", label, report.JavaMajor, requiredJava)
 	}
-	if report.JavapMajor < version.Java {
-		return fmt.Errorf("%s javap major %d is below configured requirement %d", label, report.JavapMajor, version.Java)
+	if report.JavapMajor < requiredJava {
+		return fmt.Errorf("%s javap major %d is below effective requirement %d", label, report.JavapMajor, requiredJava)
 	}
 	if report.NamedClasses < 1 {
 		return fmt.Errorf("%s has invalid named class count %d", label, report.NamedClasses)

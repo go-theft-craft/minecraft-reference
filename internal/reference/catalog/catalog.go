@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-theft-craft/minecraft-reference/internal/reference/artifact"
 	"github.com/go-theft-craft/minecraft-reference/internal/reference/config"
@@ -89,6 +90,7 @@ func Discover(
 		if err != nil {
 			return nil, err
 		}
+		version.ReleaseDate = release.ReleaseTime.UTC().Format(time.DateOnly)
 		candidate := Candidate{Family: family, New: version}
 		if replacing {
 			oldCopy := cloneVersion(old)

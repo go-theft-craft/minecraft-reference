@@ -14,10 +14,11 @@ and the pinned MCP and MCP stable exports hosted by
 [`mcp.zeith.org`](https://mcp.zeith.org/).
 
 The embedded catalog records one tested representative for each supported
-stable family. Its minimum JDK comes from the `javaVersion.majorVersion` field
-in Mojang's per-version metadata. Compatibility selects that exact JDK major
-for each representative. Local preflight accepts the recorded major or a newer
-one for both `java` and `javap`.
+stable family and preserves the `javaVersion.majorVersion` field from Mojang's
+per-version metadata. The effective minimum JDK is the higher of that value and
+Java 17, which the pinned Vineflower 1.12.0 release requires. Compatibility
+selects that effective major for each representative. Local preflight accepts
+the effective major or a newer one for both `java` and `javap`.
 
 Mojang's metadata for Java Edition 1.0 and 1.1 contains client jar downloads
 but no server jar downloads. The catalog therefore tests and supports only the
@@ -56,6 +57,7 @@ The weekly updater pins its GitHub Actions dependencies to these commits:
 |---|---|
 | `actions/checkout` | `3d3c42e5aac5ba805825da76410c181273ba90b1` |
 | `actions/setup-java` | `b6effb05e454b25005698d916606bdc6ffcbf961` |
+| `actions/cache` | `55cc8345863c7cc4c66a329aec7e433d2d1c52a9` |
 | `actions/upload-artifact` | `ea165f8d65b6e75b540449e92b4886f43607fa02` |
 | `actions/download-artifact` | `d3f86a106a0bac45b974a628896c90dbdf5c8093` |
 | `jetify-com/devbox-install-action` | `8c6a66ed6273138b1915457069de78cb52fe3bd7` |
@@ -76,8 +78,9 @@ because they contain local paths and describe restricted local artifacts.
 
 The updater runs weekly and can also be started manually. It considers only
 stable Java Edition releases from the Mojang manifest. A changed family
-representative is tested on every available side with the Java major declared
-by Mojang. The workflow accepts measured validation counts only after those
+representative is tested on every available side with the effective Java major
+required by Minecraft and the pinned reference toolchain. The workflow accepts
+measured validation counts only after those
 candidate runs pass, creates a staging commit, and dispatches the full
 Compatibility workflow against that exact commit. Only a passing staging
 commit moves to `automation/minecraft-versions` and opens or updates a pull

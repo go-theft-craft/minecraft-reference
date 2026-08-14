@@ -84,6 +84,21 @@ func TestReadmeSupportedVersionsMatchTrackedCatalog(t *testing.T) {
 	}
 }
 
+func TestCompatibilityWorkflowUsesNode24CacheAction(t *testing.T) {
+	path := filepath.Join("..", "..", ".github", "workflows", "compatibility.yml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflow := string(data)
+	if !strings.Contains(workflow, "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0") {
+		t.Error("compatibility workflow must use the pinned Node 24 cache action")
+	}
+	if strings.Contains(workflow, "actions/cache@5a3ec84eff668545956fd18022155c47e93e2684") {
+		t.Error("compatibility workflow still uses the deprecated Node 20 cache action")
+	}
+}
+
 func TestVersionUpdaterWorkflowIsSafe(t *testing.T) {
 	workflow := readVersionUpdaterWorkflow(t)
 

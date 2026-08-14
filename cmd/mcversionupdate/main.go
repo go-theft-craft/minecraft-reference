@@ -196,7 +196,7 @@ Options:`)
 					Version: version.ID,
 					Family:  version.Family,
 					Side:    side,
-					Java:    version.Java,
+					Java:    config.EffectiveJavaMajor(version.Java),
 				})
 			}
 		}

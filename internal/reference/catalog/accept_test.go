@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-theft-craft/minecraft-reference/internal/reference/config"
 	"github.com/go-theft-craft/minecraft-reference/internal/reference/pipeline"
@@ -23,7 +24,7 @@ func TestAcceptSetsFlooredNinetyPercentThresholdsForEverySide(t *testing.T) {
 		{Version: "1.8.9", Family: "1.8", Side: "client", JavaMajor: 25, JavapMajor: 25, Naming: "mcp", NamedClasses: 100, SourceRecords: 101, SymbolRecords: 999, RequiredClasses: []string{"Minecraft"}, Passed: true},
 	}
 
-	accepted, err := Accept(versions, reports)
+	accepted, err := AcceptAt(versions, reports, time.Date(2026, time.August, 14, 23, 59, 0, 0, time.FixedZone("test", 2*60*60)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,6 +41,9 @@ func TestAcceptSetsFlooredNinetyPercentThresholdsForEverySide(t *testing.T) {
 	}
 	if versions[0].Sides["client"].MinSources != 1 {
 		t.Fatalf("Accept mutated input: %#v", versions)
+	}
+	if accepted[0].VerifiedDate != "2026-08-14" {
+		t.Fatalf("verified date = %q, want 2026-08-14", accepted[0].VerifiedDate)
 	}
 }
 
@@ -78,7 +82,7 @@ func TestAcceptRejectsReportForDifferentConfiguration(t *testing.T) {
 		Sides: map[string]config.Validation{"client": {MinSources: 1, MinSymbols: 1, RequiredClasses: []string{"Minecraft"}}},
 	}
 	base := pipeline.CompatibilityReport{
-		Version: "1.8.9", Family: "1.8", Side: "client", JavaMajor: 8, JavapMajor: 8,
+		Version: "1.8.9", Family: "1.8", Side: "client", JavaMajor: 17, JavapMajor: 17,
 		Naming: "mcp", NamedClasses: 1, SourceRecords: 10, SymbolRecords: 10, RequiredClasses: []string{"Minecraft"}, Passed: true,
 	}
 	tests := []struct {
@@ -88,9 +92,10 @@ func TestAcceptRejectsReportForDifferentConfiguration(t *testing.T) {
 	}{
 		{name: "family", change: func(report *pipeline.CompatibilityReport) { report.Family = "1.7" }, want: "family"},
 		{name: "naming", change: func(report *pipeline.CompatibilityReport) { report.Naming = "identity" }, want: "naming"},
+		{name: "toolchain minimum", change: func(report *pipeline.CompatibilityReport) { report.JavaMajor, report.JavapMajor = 16, 16 }, want: "below effective requirement 17"},
 		{name: "java", change: func(report *pipeline.CompatibilityReport) { report.JavaMajor = 7 }, want: "Java"},
 		{name: "javap", change: func(report *pipeline.CompatibilityReport) { report.JavapMajor = 7 }, want: "javap"},
-		{name: "mixed tool majors", change: func(report *pipeline.CompatibilityReport) { report.JavapMajor = 9 }, want: "does not match"},
+		{name: "mixed tool majors", change: func(report *pipeline.CompatibilityReport) { report.JavapMajor = 19 }, want: "does not match"},
 		{name: "required classes", change: func(report *pipeline.CompatibilityReport) { report.RequiredClasses = nil }, want: "required classes"},
 	}
 	for _, test := range tests {

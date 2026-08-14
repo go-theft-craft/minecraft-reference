@@ -110,7 +110,7 @@ func parseJavaMajor(output string) (int, error) {
 
 func validateJavaMajor(name, path string, actual, required int, minecraftVersion string) error {
 	if actual < required {
-		return fmt.Errorf("%s %d at %s is too old; Minecraft %s requires Java %d or newer", name, actual, path, minecraftVersion, required)
+		return fmt.Errorf("%s %d at %s is too old; reference preparation for Minecraft %s requires Java %d or newer", name, actual, path, minecraftVersion, required)
 	}
 	return nil
 }

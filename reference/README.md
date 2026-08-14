@@ -19,10 +19,11 @@ lists each representative, its tested sides, and its minimum JDK. Versions 1.0
 and 1.1 support only the client side because Mojang's per-version metadata does
 not contain server jar downloads for them.
 
-The catalog's Java value is the minimum accepted major for both `java` and
-`javap`. The Compatibility workflow tests each version with that exact major.
-A local run can use newer executables. If `JAVA_HOME` selects the intended JDK,
-pass both paths explicitly:
+The catalog records Mojang's Java major. The effective minimum for `java` and
+`javap` is the higher of that value and Java 17, which the pinned Vineflower
+release requires. The Compatibility workflow tests each version with that
+effective major. A local run can use newer executables. If `JAVA_HOME` selects
+the intended JDK, pass both paths explicitly:
 
 ```bash
 mcreference prepare --versions 1.8.9,26.1.2 --sides client,server \

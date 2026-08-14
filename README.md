@@ -1,7 +1,8 @@
-# minecraft-reference
 <p align="center">
-  <img src="docs/assets/logo.png" width="250" alt="minecraft-reference logo">
+  <img src="docs/assets/logo.png" width="350" alt="minecraft-reference logo">
 </p>
+
+# minecraft-reference
 
 `mcreference` prepares local Java Edition reference material for independent
 Minecraft implementations.
@@ -15,37 +16,41 @@ family.
 
 Each row lists one tested representative for a stable release family. The
 Compatibility workflow tests each representative with the exact JDK major in
-the `Minimum JDK` column. For local runs, both `java` and `javap` can use that
-JDK major or a newer one. If one command prepares several versions, use a JDK
-that meets the highest value among those rows.
+the `Minimum JDK` column. This is the higher of Minecraft's declared Java
+requirement and Java 17, which the pinned Vineflower decompiler requires. For
+local runs, both `java` and `javap` can use that JDK major or a newer one. If
+one command prepares several versions, use a JDK that meets the highest value
+among those rows. `Released` comes from Mojang's release timestamp, and
+`Verified` records the latest accepted compatibility run; both use UTC dates.
+The newest releases appear first.
 
 <!-- BEGIN GENERATED SUPPORTED VERSIONS -->
-| Family | Tested release | Minimum JDK | Mapping source | Tested sides |
-| --- | --- | ---: | --- | --- |
-| 1.0 | `1.0` | 8 | Pinned MCP mappings | client |
-| 1.1 | `1.1` | 8 | Pinned MCP mappings | client |
-| 1.2 | `1.2.5` | 8 | Pinned MCP mappings | client and server |
-| 1.3 | `1.3.2` | 8 | Pinned MCP mappings | client and server |
-| 1.4 | `1.4.7` | 8 | Pinned MCP mappings | client and server |
-| 1.5 | `1.5.2` | 8 | Pinned MCP mappings | client and server |
-| 1.6 | `1.6.4` | 8 | Pinned MCP mappings | client and server |
-| 1.7 | `1.7.10` | 8 | Pinned MCP mappings | client and server |
-| 1.8 | `1.8.9` | 8 | Pinned MCP mappings | client and server |
-| 1.9 | `1.9.4` | 8 | Pinned MCP mappings | client and server |
-| 1.10 | `1.10.2` | 8 | Pinned MCP mappings | client and server |
-| 1.11 | `1.11.2` | 8 | Pinned MCP mappings | client and server |
-| 1.12 | `1.12.2` | 8 | Pinned MCP mappings | client and server |
-| 1.13 | `1.13.2` | 8 | Pinned MCP mappings | client and server |
-| 1.14 | `1.14.4` | 8 | Mojang client and server mappings | client and server |
-| 1.15 | `1.15.2` | 8 | Mojang client and server mappings | client and server |
-| 1.16 | `1.16.5` | 8 | Mojang client and server mappings | client and server |
-| 1.17 | `1.17.1` | 16 | Mojang client and server mappings | client and server |
-| 1.18 | `1.18.2` | 17 | Mojang client and server mappings | client and server |
-| 1.19 | `1.19.4` | 17 | Mojang client and server mappings | client and server |
-| 1.20 | `1.20.6` | 21 | Mojang client and server mappings | client and server |
-| 1.21 | `1.21.11` | 21 | Mojang client and server mappings | client and server |
-| 26.1 | `26.1.2` | 25 | Names distributed with the game | client and server |
-| 26.2 | `26.2` | 25 | Names distributed with the game | client and server |
+| Family | Tested release | Released | Verified | Minimum JDK | Mapping source | Tested sides |
+| --- | --- | --- | --- | ---: | --- | --- |
+| 26.2 | `26.2` | 2026-06-16 | 2026-08-14 | 25 | Names distributed with the game | client and server |
+| 26.1 | `26.1.2` | 2026-04-09 | 2026-08-14 | 25 | Names distributed with the game | client and server |
+| 1.21 | `1.21.11` | 2025-12-09 | 2026-08-14 | 21 | Mojang client and server mappings | client and server |
+| 1.20 | `1.20.6` | 2024-04-29 | 2026-08-14 | 21 | Mojang client and server mappings | client and server |
+| 1.19 | `1.19.4` | 2023-03-14 | 2026-08-14 | 17 | Mojang client and server mappings | client and server |
+| 1.18 | `1.18.2` | 2022-02-28 | 2026-08-14 | 17 | Mojang client and server mappings | client and server |
+| 1.17 | `1.17.1` | 2021-07-06 | 2026-08-14 | 17 | Mojang client and server mappings | client and server |
+| 1.16 | `1.16.5` | 2021-01-14 | 2026-08-14 | 17 | Mojang client and server mappings | client and server |
+| 1.15 | `1.15.2` | 2020-01-17 | 2026-08-14 | 17 | Mojang client and server mappings | client and server |
+| 1.14 | `1.14.4` | 2019-07-19 | 2026-08-14 | 17 | Mojang client and server mappings | client and server |
+| 1.13 | `1.13.2` | 2018-10-22 | 2026-08-14 | 17 | Pinned MCP mappings | client and server |
+| 1.12 | `1.12.2` | 2017-09-18 | 2026-08-14 | 17 | Pinned MCP mappings | client and server |
+| 1.11 | `1.11.2` | 2016-12-21 | 2026-08-14 | 17 | Pinned MCP mappings | client and server |
+| 1.10 | `1.10.2` | 2016-06-23 | 2026-08-14 | 17 | Pinned MCP mappings | client and server |
+| 1.9 | `1.9.4` | 2016-05-10 | 2026-08-14 | 17 | Pinned MCP mappings | client and server |
+| 1.8 | `1.8.9` | 2015-12-03 | 2026-08-14 | 17 | Pinned MCP mappings | client and server |
+| 1.7 | `1.7.10` | 2014-05-14 | 2026-08-14 | 17 | Pinned MCP mappings | client and server |
+| 1.6 | `1.6.4` | 2013-09-19 | 2026-08-14 | 17 | Pinned MCP mappings | client and server |
+| 1.5 | `1.5.2` | 2013-04-25 | 2026-08-14 | 17 | Pinned MCP mappings | client and server |
+| 1.4 | `1.4.7` | 2012-12-27 | 2026-08-14 | 17 | Pinned MCP mappings | client and server |
+| 1.3 | `1.3.2` | 2012-08-15 | 2026-08-14 | 17 | Pinned MCP mappings | client and server |
+| 1.2 | `1.2.5` | 2012-03-29 | 2026-08-14 | 17 | Pinned MCP mappings | client and server |
+| 1.1 | `1.1` | 2012-01-11 | 2026-08-14 | 17 | Pinned MCP mappings | client |
+| 1.0 | `1.0` | 2011-11-17 | 2026-08-14 | 17 | Pinned MCP mappings | client |
 <!-- END GENERATED SUPPORTED VERSIONS -->
 
 Java Edition 1.0 and 1.1 are client-only because Mojang's per-version metadata

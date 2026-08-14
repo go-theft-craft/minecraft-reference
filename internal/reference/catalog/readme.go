@@ -28,15 +28,18 @@ func UpdateREADME(source []byte, versions []config.Version) ([]byte, error) {
 	}
 
 	var table strings.Builder
-	table.WriteString("\n| Family | Tested release | Minimum JDK | Mapping source | Tested sides |\n")
-	table.WriteString("| --- | --- | ---: | --- | --- |\n")
+	table.WriteString("\n| Family | Tested release | Released | Verified | Minimum JDK | Mapping source | Tested sides |\n")
+	table.WriteString("| --- | --- | --- | --- | ---: | --- | --- |\n")
 	sorted := append([]config.Version(nil), versions...)
 	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].ReleaseDate != sorted[j].ReleaseDate {
+			return sorted[i].ReleaseDate > sorted[j].ReleaseDate
+		}
 		comparison := compareNumericParts(sorted[i].Family, sorted[j].Family)
 		if comparison != 0 {
-			return comparison < 0
+			return comparison > 0
 		}
-		return compareVersionIDs(sorted[i].ID, sorted[j].ID) < 0
+		return compareVersionIDs(sorted[i].ID, sorted[j].ID) > 0
 	})
 	for _, version := range sorted {
 		mapping, err := readableMapping(version.Naming)
@@ -52,7 +55,7 @@ func UpdateREADME(source []byte, versions []config.Version) ([]byte, error) {
 		if len(sides) == 0 {
 			return nil, fmt.Errorf("version %s has no readable tested sides", version.ID)
 		}
-		_, _ = fmt.Fprintf(&table, "| %s | `%s` | %d | %s | %s |\n", version.Family, version.ID, version.Java, mapping, strings.Join(sides, " and "))
+		_, _ = fmt.Fprintf(&table, "| %s | `%s` | %s | %s | %d | %s | %s |\n", version.Family, version.ID, readableDate(version.ReleaseDate), readableDate(version.VerifiedDate), config.EffectiveJavaMajor(version.Java), mapping, strings.Join(sides, " and "))
 	}
 
 	updated := make([]byte, 0, len(source)+table.Len())
@@ -60,6 +63,13 @@ func UpdateREADME(source []byte, versions []config.Version) ([]byte, error) {
 	updated = append(updated, table.String()...)
 	updated = append(updated, text[end:]...)
 	return updated, nil
+}
+
+func readableDate(value string) string {
+	if value == "" {
+		return "—"
+	}
+	return value
 }
 
 // CheckREADME reports whether the generated table matches the versions.

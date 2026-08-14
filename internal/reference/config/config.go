@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 //go:embed defaults/*.json
@@ -19,6 +20,18 @@ var defaults embed.FS
 
 // ErrUnsupportedVersion means the requested version has no reviewed strategy.
 var ErrUnsupportedVersion = errors.New("unsupported Minecraft version")
+
+// MinimumToolchainJavaMajor is required to run the pinned Vineflower release.
+const MinimumToolchainJavaMajor = 17
+
+// EffectiveJavaMajor combines Minecraft's declared requirement with the
+// reference toolchain's runtime requirement.
+func EffectiveJavaMajor(minecraftMajor int) int {
+	if minecraftMajor < MinimumToolchainJavaMajor {
+		return MinimumToolchainJavaMajor
+	}
+	return minecraftMajor
+}
 
 var sha256Pattern = regexp.MustCompile(`^[0-9a-fA-F]{64}$`)
 
@@ -39,12 +52,14 @@ type Validation struct {
 
 // Version configures one supported release and its validation evidence.
 type Version struct {
-	ID      string                `json:"id"`
-	Family  string                `json:"family"`
-	Java    int                   `json:"java"`
-	Naming  string                `json:"naming"`
-	Mapping *Mapping              `json:"mapping,omitempty"`
-	Sides   map[string]Validation `json:"sides"`
+	ID           string                `json:"id"`
+	Family       string                `json:"family"`
+	Java         int                   `json:"java"`
+	ReleaseDate  string                `json:"release_date,omitempty"`
+	VerifiedDate string                `json:"verified_date,omitempty"`
+	Naming       string                `json:"naming"`
+	Mapping      *Mapping              `json:"mapping,omitempty"`
+	Sides        map[string]Validation `json:"sides"`
 }
 
 // SupportsSide reports whether reference evidence is configured for side.
@@ -163,6 +178,12 @@ func validateVersions(versions []Version) error {
 		if version.Java < 1 {
 			return fmt.Errorf("version %q field java has invalid Java requirement %d", version.ID, version.Java)
 		}
+		if err := validateDate(version.ID, "release_date", version.ReleaseDate); err != nil {
+			return err
+		}
+		if err := validateDate(version.ID, "verified_date", version.VerifiedDate); err != nil {
+			return err
+		}
 		if version.Family == "" {
 			return fmt.Errorf("version %q field family must not be empty", version.ID)
 		}
@@ -201,6 +222,17 @@ func validateVersions(versions []Version) error {
 				return fmt.Errorf("version %q field sides.%s.min_symbols must be positive (got %d)", version.ID, side, validation.MinSymbols)
 			}
 		}
+	}
+	return nil
+}
+
+func validateDate(versionID, field, value string) error {
+	if value == "" {
+		return nil
+	}
+	parsed, err := time.Parse(time.DateOnly, value)
+	if err != nil || parsed.Format(time.DateOnly) != value {
+		return fmt.Errorf("version %q field %s must use YYYY-MM-DD", versionID, field)
 	}
 	return nil
 }

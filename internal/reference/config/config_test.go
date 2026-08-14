@@ -39,6 +39,24 @@ func TestEmbeddedDefaultsLoad(t *testing.T) {
 	}
 }
 
+func TestEffectiveJavaMajorIncludesReferenceToolchain(t *testing.T) {
+	tests := []struct {
+		minecraft int
+		want      int
+	}{
+		{minecraft: 8, want: 17},
+		{minecraft: 16, want: 17},
+		{minecraft: 17, want: 17},
+		{minecraft: 21, want: 21},
+		{minecraft: 25, want: 25},
+	}
+	for _, test := range tests {
+		if got := EffectiveJavaMajor(test.minecraft); got != test.want {
+			t.Errorf("EffectiveJavaMajor(%d) = %d, want %d", test.minecraft, got, test.want)
+		}
+	}
+}
+
 func TestEmbeddedDefaultsContainInitialStableFamilyCatalog(t *testing.T) {
 	versions, err := ReadVersionFile(filepath.Join("defaults", "versions.json"))
 	if err != nil {
@@ -97,6 +115,9 @@ func TestEmbeddedDefaultsContainInitialStableFamilyCatalog(t *testing.T) {
 		if got.ID != want.id || got.Family != want.family || got.Java != want.java || got.Naming != want.naming || !reflect.DeepEqual(got.Mapping, want.mapping) {
 			t.Errorf("version %d: got %#v, want %#v", index, got, want)
 			continue
+		}
+		if got.ReleaseDate == "" || got.VerifiedDate != "2026-08-14" {
+			t.Errorf("version %s has incomplete release evidence dates: released=%q verified=%q", got.ID, got.ReleaseDate, got.VerifiedDate)
 		}
 		gotSides := make([]string, 0, len(got.Sides))
 		for _, side := range []string{"client", "server"} {
@@ -166,6 +187,11 @@ func TestReadVersionFileValidation(t *testing.T) {
 			name:    "unknown side",
 			data:    strings.Replace(complete, `"server": {`, `"invalid": {"min_sources": 100, "min_symbols": 1000}, "server": {`, 1),
 			wantErr: `version "1.7.10" field sides.invalid`,
+		},
+		{
+			name:    "invalid release date",
+			data:    strings.Replace(complete, `"java": 8,`, `"java": 8, "release_date": "2011-1-7",`, 1),
+			wantErr: `version "1.7.10" field release_date must use YYYY-MM-DD`,
 		},
 		{
 			name:    "missing mapping data",
