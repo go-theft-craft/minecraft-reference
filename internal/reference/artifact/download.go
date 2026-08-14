@@ -17,12 +17,15 @@ import (
 	"strings"
 )
 
-const maxArtifactSize = int64(2 << 30)
+const (
+	maxArtifactSize = int64(2 << 30)
+	maxRedirects    = 10
+)
 
-var mojangArtifactHosts = map[string]struct{}{
-	"piston-data.mojang.com":  {},
-	"piston-meta.mojang.com":  {},
-	"libraries.minecraft.net": {},
+var mojangHosts = map[string]struct{}{
+	"piston-data.mojang.com": {},
+	"piston-meta.mojang.com": {},
+	"launcher.mojang.com":    {},
 }
 
 var configuredToolHosts = map[string]struct{}{
@@ -143,20 +146,11 @@ func validateSpec(spec DownloadSpec) error {
 }
 
 func validateDownloadURL(spec DownloadSpec, location *url.URL) error {
-	if location.Scheme != "https" {
-		return fmt.Errorf("download URL must use HTTPS: %q", location.String())
+	hostname, err := trustedHTTPSHostname(location)
+	if err != nil {
+		return err
 	}
-	if location.User != nil {
-		return fmt.Errorf("download URL must not contain user credentials: %q", location.String())
-	}
-	if port := location.Port(); port != "" && port != "443" {
-		return fmt.Errorf("download URL has an untrusted port: %q", location.String())
-	}
-	hostname := strings.ToLower(location.Hostname())
-	if hostname == "" {
-		return fmt.Errorf("download URL has no host: %q", location.String())
-	}
-	if _, ok := mojangArtifactHosts[hostname]; ok {
+	if _, ok := mojangHosts[hostname]; ok || hostname == "libraries.minecraft.net" {
 		if spec.SHA1 == "" {
 			return fmt.Errorf("mojang artifact %q requires SHA-1", location.String())
 		}
@@ -171,16 +165,56 @@ func validateDownloadURL(spec DownloadSpec, location *url.URL) error {
 	return fmt.Errorf("download URL host %q is not trusted", hostname)
 }
 
+func validateMetadataURL(location *url.URL) error {
+	hostname, err := trustedHTTPSHostname(location)
+	if err != nil {
+		return err
+	}
+	if _, ok := mojangHosts[hostname]; !ok {
+		return fmt.Errorf("metadata URL host %q is not trusted", hostname)
+	}
+	return nil
+}
+
+func trustedHTTPSHostname(location *url.URL) (string, error) {
+	if location.Scheme != "https" {
+		return "", fmt.Errorf("download URL must use HTTPS: %q", location.String())
+	}
+	if location.User != nil {
+		return "", fmt.Errorf("download URL must not contain user credentials: %q", location.String())
+	}
+	if port := location.Port(); port != "" && port != "443" {
+		return "", fmt.Errorf("download URL has an untrusted port: %q", location.String())
+	}
+	hostname := strings.ToLower(location.Hostname())
+	if hostname == "" {
+		return "", fmt.Errorf("download URL has no host: %q", location.String())
+	}
+	return hostname, nil
+}
+
 func (d Downloader) client(spec DownloadSpec) *http.Client {
-	base := d.Client
+	return clientWithURLPolicy(d.Client, func(location *url.URL) error {
+		return validateDownloadURL(spec, location)
+	})
+}
+
+func (r Resolver) metadataClient() *http.Client {
+	return clientWithURLPolicy(r.Client, validateMetadataURL)
+}
+
+func clientWithURLPolicy(base *http.Client, validate func(*url.URL) error) *http.Client {
 	if base == nil {
 		base = http.DefaultClient
 	}
 	client := *base
 	previousCheckRedirect := client.CheckRedirect
 	client.CheckRedirect = func(request *http.Request, via []*http.Request) error {
-		if err := validateDownloadURL(spec, request.URL); err != nil {
+		if err := validate(request.URL); err != nil {
 			return fmt.Errorf("reject redirect target: %w", err)
+		}
+		if len(via) >= maxRedirects {
+			return fmt.Errorf("stopped after %d redirects", maxRedirects)
 		}
 		if previousCheckRedirect != nil {
 			return previousCheckRedirect(request, via)

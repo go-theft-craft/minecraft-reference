@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -83,6 +84,7 @@ func TestDownloadAllowsTrustedHostsWithRequiredDigest(t *testing.T) {
 	defer server.Close()
 
 	tests := map[string]DownloadSpec{
+		"Launcher metadata":   {URL: "https://launcher.mojang.com/mc/game/version_manifest_v2.json", SHA1: fmt.Sprintf("%x", sha1Value)},
 		"Mojang metadata":     {URL: "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json", SHA1: fmt.Sprintf("%x", sha1Value)},
 		"Mojang data":         {URL: trustedFixtureURL, SHA1: fmt.Sprintf("%x", sha1Value)},
 		"Minecraft libraries": {URL: "https://libraries.minecraft.net/com/example/library.jar", SHA1: fmt.Sprintf("%x", sha1Value)},
@@ -149,9 +151,9 @@ func TestDownloadRejectsRedirectToUntrustedHost(t *testing.T) {
 	payload := []byte("minecraft fixture")
 	sha1Value := sha1.Sum(payload)
 	allowedRequests := 0
-	allowedServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+	allowedServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		allowedRequests++
-		http.Redirect(writer, nil, "https://example.invalid/file", http.StatusFound)
+		http.Redirect(writer, request, "https://example.invalid/file", http.StatusFound)
 	}))
 	defer allowedServer.Close()
 	deniedRequests := 0
@@ -176,6 +178,32 @@ func TestDownloadRejectsRedirectToUntrustedHost(t *testing.T) {
 	}
 	if deniedRequests != 0 {
 		t.Fatalf("got %d denied-host requests, want none", deniedRequests)
+	}
+}
+
+func TestDownloadStopsAfterTenRedirects(t *testing.T) {
+	payload := []byte("minecraft fixture")
+	sha1Value := sha1.Sum(payload)
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requests++
+		if requests <= 10 {
+			http.Redirect(writer, request, trustedFixtureURL, http.StatusFound)
+			return
+		}
+		_, _ = writer.Write(payload)
+	}))
+	defer server.Close()
+
+	_, err := (Downloader{Client: rewriteHostClient(t, server, "piston-data.mojang.com")}).Download(context.Background(), DownloadSpec{
+		URL:  trustedFixtureURL,
+		SHA1: fmt.Sprintf("%x", sha1Value),
+	}, filepath.Join(t.TempDir(), "artifact.bin"))
+	if err == nil || !strings.Contains(err.Error(), "stopped after 10 redirects") {
+		t.Fatalf("got %v, want redirect-limit error", err)
+	}
+	if requests != 10 {
+		t.Fatalf("got %d requests, want 10", requests)
 	}
 }
 

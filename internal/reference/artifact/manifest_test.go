@@ -48,6 +48,72 @@ func TestListReleasesPreservesMojangManifestEntries(t *testing.T) {
 	}
 }
 
+func TestListReleasesRejectsUntrustedManifestURLBeforeRequest(t *testing.T) {
+	requests := 0
+	resolver := Resolver{
+		Client: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			requests++
+			return nil, nil
+		})},
+		ManifestURL: "https://example.invalid/mc/game/version_manifest_v2.json",
+	}
+	_, err := resolver.ListReleases(context.Background())
+	if err == nil {
+		t.Fatal("expected untrusted manifest URL error")
+	}
+	if requests != 0 {
+		t.Fatalf("got %d requests, want none", requests)
+	}
+}
+
+func TestListReleasesRejectsRedirectToUntrustedHost(t *testing.T) {
+	allowedRequests := 0
+	allowedServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		allowedRequests++
+		http.Redirect(writer, request, "https://example.invalid/mc/game/version_manifest_v2.json", http.StatusFound)
+	}))
+	defer allowedServer.Close()
+	deniedRequests := 0
+	deniedServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		deniedRequests++
+		_, _ = writer.Write([]byte(`{"versions":[]}`))
+	}))
+	defer deniedServer.Close()
+
+	resolver := Resolver{
+		Client: rewriteHostsClient(t, map[string]*httptest.Server{
+			"example.invalid":        deniedServer,
+			"piston-meta.mojang.com": allowedServer,
+		}),
+		ManifestURL: "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json",
+	}
+	_, err := resolver.ListReleases(context.Background())
+	if err == nil {
+		t.Fatal("expected redirect to untrusted host error")
+	}
+	if allowedRequests != 1 {
+		t.Fatalf("got %d allowed-host requests, want 1", allowedRequests)
+	}
+	if deniedRequests != 0 {
+		t.Fatalf("got %d denied-host requests, want none", deniedRequests)
+	}
+}
+
+func TestListReleasesAllowsLauncherMetadataHost(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte(`{"versions":[]}`))
+	}))
+	defer server.Close()
+
+	resolver := Resolver{
+		Client:      rewriteHostClient(t, server, "launcher.mojang.com"),
+		ManifestURL: "https://launcher.mojang.com/mc/game/version_manifest_v2.json",
+	}
+	if _, err := resolver.ListReleases(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDecodeVersionFillsLibraryURL(t *testing.T) {
 	resolver := Resolver{}
 	metadata, err := resolver.DecodeVersion([]byte(`{

@@ -147,10 +147,10 @@ func (r Resolver) getJSON(ctx context.Context, source string, destination any) e
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
-	client := r.Client
-	if client == nil {
-		client = http.DefaultClient
+	if err := validateMetadataURL(request.URL); err != nil {
+		return err
 	}
+	client := r.metadataClient()
 	response, err := client.Do(request)
 	if err != nil {
 		return fmt.Errorf("GET %s: %w", source, err)
