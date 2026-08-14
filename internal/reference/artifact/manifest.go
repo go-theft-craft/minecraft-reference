@@ -64,6 +64,12 @@ type VersionMetadata struct {
 	Libraries   []Library             `json:"libraries"`
 }
 
+// MappingDownload returns the official mapping artifact for one game side.
+func (metadata VersionMetadata) MappingDownload(side string) (RemoteFile, bool) {
+	download, ok := metadata.Downloads[side+"_mappings"]
+	return download, ok
+}
+
 type manifest struct {
 	Versions []Release `json:"versions"`
 }

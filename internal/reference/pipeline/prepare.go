@@ -15,12 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-theft-craft/minecraft-reference/internal/reference/archive"
 	"github.com/go-theft-craft/minecraft-reference/internal/reference/artifact"
 	"github.com/go-theft-craft/minecraft-reference/internal/reference/config"
 	"github.com/go-theft-craft/minecraft-reference/internal/reference/decompile"
 	"github.com/go-theft-craft/minecraft-reference/internal/reference/index"
-	"github.com/go-theft-craft/minecraft-reference/internal/reference/mapping"
 )
 
 // Options configures one non-interactive reference preparation run.
@@ -143,17 +141,6 @@ func Prepare(ctx context.Context, options Options) error {
 		}
 		lock.Artifacts = append(lock.Artifacts, result)
 
-		var specialSource, composedMapping string
-		if version.Naming == "mcp-stable-22" {
-			specialSource, composedMapping, libraryResults, err = prepareMCP(ctx, downloader, referenceDir, versionDir, tools)
-			if err != nil {
-				return err
-			}
-			lock.Artifacts = append(lock.Artifacts, libraryResults...)
-		} else if version.Naming != "identity" {
-			return fmt.Errorf("unsupported naming strategy %q", version.Naming)
-		}
-
 		for _, side := range unique(options.Sides) {
 			download, ok := metadata.Downloads[side]
 			if !ok {
@@ -175,14 +162,22 @@ func Prepare(ctx context.Context, options Options) error {
 					return err
 				}
 			}
-			if version.Naming == "mcp-stable-22" {
-				mapped := filepath.Join(sideDir, "named.jar")
-				progress(options, fmt.Sprintf("remap %s %s", versionID, side))
-				if err := mapping.Remap(ctx, java, specialSource, analysisJar, mapped, composedMapping); err != nil {
-					return err
-				}
-				analysisJar = mapped
+			progress(options, fmt.Sprintf("name %s %s", versionID, side))
+			analysisJar, namingResults, err := prepareNamedJar(ctx, namingOptions{
+				Version:      version,
+				Side:         side,
+				AnalysisJar:  analysisJar,
+				VersionDir:   versionDir,
+				ReferenceDir: referenceDir,
+				Java:         java,
+				Tools:        tools,
+				Metadata:     metadata,
+				Downloader:   downloader,
+			})
+			if err != nil {
+				return err
 			}
+			lock.Artifacts = appendArtifactResults(lock.Artifacts, namingResults...)
 
 			sourceDir := filepath.Join(referenceDir, "sources", versionID, side)
 			progress(options, fmt.Sprintf("decompile %s %s", versionID, side))
@@ -245,42 +240,6 @@ func downloadLibraries(ctx context.Context, downloader artifact.Downloader, meta
 	return paths, results, nil
 }
 
-func prepareMCP(ctx context.Context, downloader artifact.Downloader, referenceDir, versionDir string, tools map[string]config.Tool) (string, string, []artifact.DownloadResult, error) {
-	ids := []string{"specialsource-1.11.4", "mcp-1.8.9-srg", "mcp-stable-22-1.8.9"}
-	paths := make(map[string]string, len(ids))
-	results := make([]artifact.DownloadResult, 0, len(ids))
-	for _, id := range ids {
-		tool, err := requireTool(tools, id)
-		if err != nil {
-			return "", "", nil, err
-		}
-		path, result, err := downloadTool(ctx, downloader, referenceDir, tool)
-		if err != nil {
-			return "", "", nil, err
-		}
-		paths[id] = path
-		results = append(results, result)
-	}
-	mappingDir := filepath.Join(versionDir, "mappings")
-	joined := filepath.Join(mappingDir, "joined.srg")
-	fields := filepath.Join(mappingDir, "fields.csv")
-	methods := filepath.Join(mappingDir, "methods.csv")
-	for _, extraction := range []struct{ archive, name, destination string }{
-		{paths["mcp-1.8.9-srg"], "joined.srg", joined},
-		{paths["mcp-stable-22-1.8.9"], "fields.csv", fields},
-		{paths["mcp-stable-22-1.8.9"], "methods.csv", methods},
-	} {
-		if err := archive.ExtractFile(extraction.archive, extraction.name, extraction.destination); err != nil {
-			return "", "", nil, err
-		}
-	}
-	composed := filepath.Join(mappingDir, "joined-stable-22.srg")
-	if err := mapping.ComposeMCP(joined, fields, methods, composed); err != nil {
-		return "", "", nil, err
-	}
-	return paths["specialsource-1.11.4"], composed, results, nil
-}
-
 func downloadTool(ctx context.Context, downloader artifact.Downloader, referenceDir string, tool config.Tool) (string, artifact.DownloadResult, error) {
 	parsed, err := url.Parse(tool.URL)
 	if err != nil {
@@ -327,6 +286,21 @@ func unique(values []string) []string {
 		result = append(result, value)
 	}
 	return result
+}
+
+func appendArtifactResults(existing []artifact.DownloadResult, additions ...artifact.DownloadResult) []artifact.DownloadResult {
+	paths := make(map[string]struct{}, len(existing)+len(additions))
+	for _, result := range existing {
+		paths[result.Path] = struct{}{}
+	}
+	for _, result := range additions {
+		if _, exists := paths[result.Path]; exists {
+			continue
+		}
+		paths[result.Path] = struct{}{}
+		existing = append(existing, result)
+	}
+	return existing
 }
 
 func writeJSON(path string, value any) error {
