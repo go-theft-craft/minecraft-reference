@@ -5,9 +5,16 @@ Minecraft implementations.
 
 The command downloads artifacts from Mojang, verifies them, applies legacy
 names where needed, decompiles them, and writes searchable symbol indexes. It
-supports Java Edition 1.8.9 and 26.1.2.
+includes a tested representative from each supported stable Java Edition
+family.
 
 ## Supported versions
+
+Each row lists one tested representative for a stable release family. The
+Compatibility workflow tests each representative with the exact JDK major in
+the `Minimum JDK` column. For local runs, both `java` and `javap` can use that
+JDK major or a newer one. If one command prepares several versions, use a JDK
+that meets the highest value among those rows.
 
 <!-- BEGIN GENERATED SUPPORTED VERSIONS -->
 | Family | Tested release | Minimum JDK | Mapping source | Tested sides |
@@ -38,11 +45,13 @@ supports Java Edition 1.8.9 and 26.1.2.
 | 26.2 | `26.2` | 25 | Names distributed with the game | client and server |
 <!-- END GENERATED SUPPORTED VERSIONS -->
 
-## Run a release
+Java Edition 1.0 and 1.1 are client-only because Mojang's per-version metadata
+does not provide server jars for those releases.
 
-Install JDK 25 first. Both `java` and `javap` must be available on `PATH`.
+## Use a release archive
 
-Download the archive for your system from the
+Release archives support Linux, macOS, and Windows on amd64 and arm64. Download
+the archive for your system from the
 [latest release](https://github.com/go-theft-craft/minecraft-reference/releases/latest):
 
 | System | amd64 | arm64 |
@@ -56,22 +65,27 @@ On Linux or macOS, extract the archive and run the binary:
 ```bash
 tar -xzf mcreference_VERSION_SYSTEM_ARCH.tar.gz
 ./mcreference version
-./mcreference prepare --versions 1.8.9,26.1.2 --sides client,server
+./mcreference prepare --versions 1.8.9,26.1.2 --sides client,server \
+	--java "$JAVA_HOME/bin/java" --javap "$JAVA_HOME/bin/javap"
 ```
 
 On Windows, extract the ZIP archive and run these commands in PowerShell:
 
 ```powershell
 .\mcreference.exe version
-.\mcreference.exe prepare --versions 1.8.9,26.1.2 --sides client,server
+.\mcreference.exe prepare --versions 1.8.9,26.1.2 --sides client,server `
+	--java "$env:JAVA_HOME\bin\java.exe" --javap "$env:JAVA_HOME\bin\javap.exe"
 ```
 
 Replace `VERSION`, `SYSTEM`, and `ARCH` with the values from the downloaded
 archive name. Each release also provides `checksums.txt` and an SBOM for every
-archive.
+archive. The archives contain the Go binary, so they do not require Go or
+Devbox.
 
-Before it downloads files, `prepare` checks that both `java` and `javap` exist
-and meet the Java requirement for every requested Minecraft version.
+The examples prepare 1.8.9 and 26.1.2 together, so `JAVA_HOME` must select JDK
+25 or newer. As an alternative, add the selected JDK's `bin` directory to
+`PATH` and omit `--java` and `--javap`. Before it downloads files, `prepare`
+checks both executables against every requested Minecraft version.
 
 [![Terminal demo of mcreference preparing Minecraft 26.1.2 server reference files](docs/assets/mcreference-terminal-demo.gif)](docs/assets/mcreference-terminal-demo.mp4)
 
@@ -102,3 +116,11 @@ devbox run -- task reference:prepare VERSIONS=1.8.9,26.1.2 SIDES=client,server
 
 See [`reference/README.md`](reference/README.md) for the workspace layout and
 cleanup rules.
+
+## Version updates
+
+Weekly automation checks Mojang's manifest for a new stable representative in
+each family. It tests every available side, creates a staging commit, and runs
+the complete Compatibility workflow against that commit. Only after
+Compatibility passes does the automation open or update a pull request for
+human review. The updater does not publish tags or releases.

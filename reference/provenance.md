@@ -13,6 +13,16 @@ commit `7e368b355f507d62085497195cfd4c79e532c450`](https://github.com/GrylaMC/MC
 and the pinned MCP and MCP stable exports hosted by
 [`mcp.zeith.org`](https://mcp.zeith.org/).
 
+The embedded catalog records one tested representative for each supported
+stable family. Its minimum JDK comes from the `javaVersion.majorVersion` field
+in Mojang's per-version metadata. Compatibility selects that exact JDK major
+for each representative. Local preflight accepts the recorded major or a newer
+one for both `java` and `javap`.
+
+Mojang's metadata for Java Edition 1.0 and 1.1 contains client jar downloads
+but no server jar downloads. The catalog therefore tests and supports only the
+client side for those two families.
+
 It verifies each version JSON, client jar, server jar, and Java library against
 the size and SHA-1 published in that metadata. Each local lock manifest also
 records the computed SHA-256.
@@ -71,4 +81,5 @@ by Mojang. The workflow accepts measured validation counts only after those
 candidate runs pass, creates a staging commit, and dispatches the full
 Compatibility workflow against that exact commit. Only a passing staging
 commit moves to `automation/minecraft-versions` and opens or updates a pull
-request for human review. The workflow never publishes a tag or release.
+request for human review. A reviewer decides whether to merge the catalog
+change. The workflow never publishes a tag or release.
