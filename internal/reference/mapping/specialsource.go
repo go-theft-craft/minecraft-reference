@@ -1,6 +1,7 @@
 package mapping
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,8 +10,90 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 )
+
+// WriteSRG writes a mapping in deterministic SpecialSource SRG order.
+func WriteSRG(output io.Writer, value Mapping) error {
+	classes := append([]Class(nil), value.Classes...)
+	fields := append([]Field(nil), value.Fields...)
+	methods := append([]Method(nil), value.Methods...)
+	sort.Slice(classes, func(i, j int) bool {
+		if classes[i].Source != classes[j].Source {
+			return classes[i].Source < classes[j].Source
+		}
+		return classes[i].Target < classes[j].Target
+	})
+	sort.Slice(fields, func(i, j int) bool {
+		return lessMember(fields[i].Owner, fields[i].Source, fields[i].Descriptor, fields[j].Owner, fields[j].Source, fields[j].Descriptor)
+	})
+	sort.Slice(methods, func(i, j int) bool {
+		return lessMember(methods[i].Owner, methods[i].Source, methods[i].Descriptor, methods[j].Owner, methods[j].Source, methods[j].Descriptor)
+	})
+
+	classMap, err := classTargets(classes)
+	if err != nil {
+		return fmt.Errorf("validate SRG classes: %w", err)
+	}
+	writer := bufio.NewWriter(output)
+	for _, class := range classes {
+		if _, err := fmt.Fprintf(writer, "CL: %s %s\n", class.Source, class.Target); err != nil {
+			return fmt.Errorf("write SRG class: %w", err)
+		}
+	}
+	for _, field := range fields {
+		targetOwner, exists := classMap[field.Owner]
+		if !exists {
+			return fmt.Errorf("SRG field %q has missing owner %q", field.Source, field.Owner)
+		}
+		if _, err := remapDescriptor(field.Descriptor, classMap, false); err != nil {
+			return fmt.Errorf("SRG field %s/%s: %w", field.Owner, field.Source, err)
+		}
+		if _, err := fmt.Fprintf(writer, "FD: %s/%s %s/%s\n", field.Owner, field.Source, targetOwner, field.Target); err != nil {
+			return fmt.Errorf("write SRG field: %w", err)
+		}
+	}
+	for _, method := range methods {
+		if isConstructor(method.Source) || isConstructor(method.Target) {
+			continue
+		}
+		targetOwner, exists := classMap[method.Owner]
+		if !exists {
+			return fmt.Errorf("SRG method %q has missing owner %q", method.Source, method.Owner)
+		}
+		targetDescriptor, err := remapDescriptor(method.Descriptor, classMap, true)
+		if err != nil {
+			return fmt.Errorf("SRG method %s/%s: %w", method.Owner, method.Source, err)
+		}
+		if _, err := fmt.Fprintf(
+			writer,
+			"MD: %s/%s %s %s/%s %s\n",
+			method.Owner,
+			method.Source,
+			method.Descriptor,
+			targetOwner,
+			method.Target,
+			targetDescriptor,
+		); err != nil {
+			return fmt.Errorf("write SRG method: %w", err)
+		}
+	}
+	if err := writer.Flush(); err != nil {
+		return fmt.Errorf("flush SRG output: %w", err)
+	}
+	return nil
+}
+
+func lessMember(leftOwner, leftName, leftDescriptor, rightOwner, rightName, rightDescriptor string) bool {
+	if leftOwner != rightOwner {
+		return leftOwner < rightOwner
+	}
+	if leftName != rightName {
+		return leftName < rightName
+	}
+	return leftDescriptor < rightDescriptor
+}
 
 // Remap runs pinned SpecialSource when its input fingerprint changed.
 func Remap(ctx context.Context, java, tool, input, output, mapping string) error {
