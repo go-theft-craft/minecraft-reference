@@ -314,7 +314,15 @@ func resolveExecutable(requested, fallback string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("find %s executable: %w", name, err)
 	}
-	return path, nil
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s executable path %s: %w", name, path, err)
+	}
+	effective, err := filepath.EvalSymlinks(absolute)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s executable symlinks at %s: %w", name, absolute, err)
+	}
+	return effective, nil
 }
 
 func unique(values []string) []string {

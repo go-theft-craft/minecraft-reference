@@ -79,6 +79,11 @@ func TestDiscoverSelectsNewestStableReleaseByReleaseTime(t *testing.T) {
 func TestDiscoverUsesIdentityWhenRequestedMappingsAreMissing(t *testing.T) {
 	old := testVersion("1.13.2", "1.13", 8, "mcp")
 	old.Mapping = &config.Mapping{Format: "tiny-v1", Tool: "legacy"}
+	old.Sides["client"] = config.Validation{
+		MinSources:      10,
+		MinSymbols:      20,
+		RequiredClasses: []string{"LegacyMinecraft"},
+	}
 	release := artifact.Release{ID: "1.13.3", Type: "release", ReleaseTime: time.Now()}
 	candidates, err := Discover(context.Background(), []artifact.Release{release}, []config.Version{old}, func(context.Context, artifact.Release) (artifact.VersionMetadata, error) {
 		return artifact.VersionMetadata{
@@ -100,8 +105,12 @@ func TestDiscoverUsesIdentityWhenRequestedMappingsAreMissing(t *testing.T) {
 	if candidates[0].New.Naming != "identity" || candidates[0].New.Mapping != nil {
 		t.Fatalf("automatic discovery generated legacy mappings: %#v", candidates[0].New)
 	}
-	if candidates[0].New.Sides["client"].MinSources != old.Sides["client"].MinSources {
-		t.Fatalf("replacement did not retain validation floor: %#v", candidates[0].New.Sides)
+	validation := candidates[0].New.Sides["client"]
+	if validation.MinSources != 1 || validation.MinSymbols != 1 {
+		t.Fatalf("replacement retained old validation floors: %#v", validation)
+	}
+	if !reflect.DeepEqual(validation.RequiredClasses, old.Sides["client"].RequiredClasses) {
+		t.Fatalf("replacement did not retain required classes: %#v", validation)
 	}
 }
 

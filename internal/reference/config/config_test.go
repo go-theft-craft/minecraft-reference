@@ -173,6 +173,11 @@ func TestReadVersionFileValidation(t *testing.T) {
 			wantErr: `version "1.7.10" field mapping.format`,
 		},
 		{
+			name:    "unknown mapping format",
+			data:    strings.Replace(complete, `"format": "tiny-v1"`, `"format": "unknown"`, 1),
+			wantErr: `version "1.7.10" field mapping.format has unsupported format "unknown"`,
+		},
+		{
 			name:    "empty validation limits",
 			data:    strings.Replace(complete, `"min_sources": 100`, `"min_sources": 0`, 1),
 			wantErr: `version "1.7.10" field sides.client.min_sources`,

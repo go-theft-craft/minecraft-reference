@@ -106,16 +106,21 @@ func candidateVersion(family string, metadata artifact.VersionMetadata, old conf
 		if _, ok := metadata.Downloads[side]; !ok {
 			continue
 		}
-		validation, exists := old.Sides[side]
-		if !replacing || !exists {
+		requiredClasses := []string(nil)
+		if validation, exists := old.Sides[side]; replacing && exists {
+			requiredClasses = append(requiredClasses, validation.RequiredClasses...)
+		} else {
 			requiredClass := "Minecraft"
 			if side == "server" {
 				requiredClass = "MinecraftServer"
 			}
-			validation = config.Validation{MinSources: 1, MinSymbols: 1, RequiredClasses: []string{requiredClass}}
+			requiredClasses = []string{requiredClass}
 		}
-		validation.RequiredClasses = append([]string(nil), validation.RequiredClasses...)
-		sides[side] = validation
+		sides[side] = config.Validation{
+			MinSources:      1,
+			MinSymbols:      1,
+			RequiredClasses: requiredClasses,
+		}
 		if _, ok := metadata.MappingDownload(side); !ok {
 			allMappings = false
 		}

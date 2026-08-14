@@ -90,6 +90,7 @@ func TestAcceptRejectsReportForDifferentConfiguration(t *testing.T) {
 		{name: "naming", change: func(report *pipeline.CompatibilityReport) { report.Naming = "identity" }, want: "naming"},
 		{name: "java", change: func(report *pipeline.CompatibilityReport) { report.JavaMajor = 7 }, want: "Java"},
 		{name: "javap", change: func(report *pipeline.CompatibilityReport) { report.JavapMajor = 7 }, want: "javap"},
+		{name: "mixed tool majors", change: func(report *pipeline.CompatibilityReport) { report.JavapMajor = 9 }, want: "does not match"},
 		{name: "required classes", change: func(report *pipeline.CompatibilityReport) { report.RequiredClasses = nil }, want: "required classes"},
 	}
 	for _, test := range tests {
@@ -104,7 +105,7 @@ func TestAcceptRejectsReportForDifferentConfiguration(t *testing.T) {
 	}
 }
 
-func TestAcceptDoesNotLowerExistingThresholds(t *testing.T) {
+func TestAcceptAssignsMeasuredThresholdsExactly(t *testing.T) {
 	version := config.Version{
 		ID: "1.20.6", Family: "1.20", Java: 21, Naming: "mojang",
 		Sides: map[string]config.Validation{
@@ -120,7 +121,7 @@ func TestAcceptDoesNotLowerExistingThresholds(t *testing.T) {
 		t.Fatal(err)
 	}
 	validation := accepted[0].Sides["client"]
-	if validation.MinSources != 100 || validation.MinSymbols != 200 {
-		t.Fatalf("lowered existing thresholds: %#v", validation)
+	if validation.MinSources != 90 || validation.MinSymbols != 180 {
+		t.Fatalf("did not replace existing thresholds: %#v", validation)
 	}
 }

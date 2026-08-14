@@ -224,6 +224,8 @@ func validateMCPMapping(version Version) error {
 		if version.Mapping.NamesTool == "" {
 			return fmt.Errorf("version %q field mapping.names_tool is required for srg-csv", version.ID)
 		}
+	default:
+		return fmt.Errorf("version %q field mapping.format has unsupported format %q", version.ID, version.Mapping.Format)
 	}
 	return nil
 }

@@ -43,8 +43,8 @@ func Accept(versions []config.Version, reports []pipeline.CompatibilityReport) (
 			if err := validateReport(version, side, validation, report); err != nil {
 				return nil, err
 			}
-			validation.MinSources = max(validation.MinSources, acceptedMinimum(report.SourceRecords))
-			validation.MinSymbols = max(validation.MinSymbols, acceptedMinimum(report.SymbolRecords))
+			validation.MinSources = acceptedMinimum(report.SourceRecords)
+			validation.MinSymbols = acceptedMinimum(report.SymbolRecords)
 			validation.RequiredClasses = append([]string(nil), validation.RequiredClasses...)
 			updated.Sides[side] = validation
 		}
@@ -63,6 +63,9 @@ func validateReport(version config.Version, side string, validation config.Valid
 	}
 	if report.Naming != version.Naming {
 		return fmt.Errorf("%s naming %q does not match configured naming %q", label, report.Naming, version.Naming)
+	}
+	if report.JavaMajor != report.JavapMajor {
+		return fmt.Errorf("%s Java major %d does not match javap major %d", label, report.JavaMajor, report.JavapMajor)
 	}
 	if report.JavaMajor < version.Java {
 		return fmt.Errorf("%s Java major %d is below configured requirement %d", label, report.JavaMajor, version.Java)
