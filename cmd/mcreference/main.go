@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/go-theft-craft/minecraft-reference/internal/reference/physics"
 	"github.com/go-theft-craft/minecraft-reference/internal/reference/pipeline"
 )
 
@@ -24,11 +25,13 @@ const usageText = `mcreference prepares a local vanilla Minecraft reference work
 
 Usage:
   mcreference prepare --versions <ids> [options]
+  mcreference dump --versions <id> [--side server] --output <path>
   mcreference clean --reference-dir <path> --yes
   mcreference version
 
 Commands:
   prepare  Download, name, decompile, and index client or server jars
+  dump     Extract physics constants from a prepared reference workspace
   clean    Remove one validated reference workspace
   version  Print build information
 
@@ -53,6 +56,8 @@ func run(ctx context.Context, arguments []string, stdout, stderr io.Writer) erro
 		return nil
 	case "prepare":
 		return runPrepare(ctx, arguments[1:], stdout, stderr)
+	case "dump":
+		return runDump(ctx, arguments[1:], stdout, stderr)
 	case "clean":
 		return runClean(arguments[1:], stdout, stderr)
 	case "version", "--version":
@@ -151,6 +156,67 @@ Example:
 		return err
 	}
 	_, _ = fmt.Fprintf(stdout, "removed %s\n", removed)
+	return nil
+}
+
+func runDump(ctx context.Context, arguments []string, stdout, stderr io.Writer) error {
+	set := flag.NewFlagSet("dump", flag.ContinueOnError)
+	set.SetOutput(stderr)
+	set.Usage = func() {
+		_, _ = fmt.Fprintln(stderr, `Usage:
+  mcreference dump --versions <id> [--side server] [--reference-dir <path>] --output <path>
+
+Options:`)
+		set.PrintDefaults()
+		_, _ = fmt.Fprintln(stderr, `
+Examples:
+  mcreference dump --versions 1.8.9 --output physics.json`)
+	}
+	versions := set.String("versions", "", "one prepared Minecraft version (required)")
+	side := set.String("side", "server", "prepared side to read")
+	workspace := set.String("workspace", "", "workspace root (default: current directory)")
+	referenceDir := set.String("reference-dir", "reference/work", "prepared directory below the workspace")
+	output := set.String("output", "", "physics document output path (required)")
+	java := set.String("java", "java", "Java executable")
+	javac := set.String("javac", "javac", "Java compiler executable")
+	if err := set.Parse(arguments); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+
+		return err
+	}
+	if set.NArg() != 0 {
+		return fmt.Errorf("dump accepts no positional arguments: %s", strings.Join(set.Args(), " "))
+	}
+	if strings.TrimSpace(*versions) == "" {
+		return errors.New("--versions is required; example: mcreference dump --versions 1.8.9 --output physics.json")
+	}
+	if strings.TrimSpace(*output) == "" {
+		return errors.New("--output is required; example: mcreference dump --versions 1.8.9 --output physics.json")
+	}
+
+	selected := splitCSV(*versions)
+	if len(selected) != 1 {
+		return fmt.Errorf("dump accepts exactly one version, got %d", len(selected))
+	}
+
+	root, err := workspaceRoot(*workspace)
+	if err != nil {
+		return err
+	}
+	if err := physics.Dump(ctx, physics.Options{
+		ReferenceDir: filepath.Join(root, *referenceDir),
+		Version:      selected[0],
+		Side:         *side,
+		Output:       *output,
+		Java:         *java,
+		Javac:        *javac,
+	}); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(stdout, "wrote %s\n", *output)
+
 	return nil
 }
 
