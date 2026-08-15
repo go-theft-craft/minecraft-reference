@@ -28,6 +28,13 @@ func namedJarPath(referenceDir, version, side string) string {
 	return filepath.Join(referenceDir, "versions", version, side, "named.jar")
 }
 
+// originalJarPath locates the jar exactly as Mojang published it. Its digest is
+// the provenance consumers can verify; named.jar is a local remap whose bytes
+// depend on the mapping tools and are not reproducible elsewhere.
+func originalJarPath(referenceDir, version, side string) string {
+	return filepath.Join(referenceDir, "versions", version, side, "original.jar")
+}
+
 func librariesPath(referenceDir, version string) string {
 	return filepath.Join(referenceDir, "versions", version, "libraries")
 }
@@ -54,9 +61,13 @@ func Dump(ctx context.Context, options Options) error {
 	}
 
 	jar := namedJarPath(options.ReferenceDir, options.Version, options.Side)
-	digest, err := fileDigest(jar)
-	if err != nil {
+	if _, err := os.Stat(jar); err != nil {
 		return fmt.Errorf("read named jar: %w", err)
+	}
+
+	digest, err := fileDigest(originalJarPath(options.ReferenceDir, options.Version, options.Side))
+	if err != nil {
+		return fmt.Errorf("read original jar: %w", err)
 	}
 
 	staging, err := os.MkdirTemp("", "mcreference-dump-")

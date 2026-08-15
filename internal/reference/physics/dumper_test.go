@@ -2,6 +2,8 @@ package physics
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -41,6 +43,10 @@ func TestDumpWritesDocumentFromStubbedJava(t *testing.T) {
 	if err := os.WriteFile(jar, []byte("not a real jar"), 0o600); err != nil {
 		t.Fatalf("write stub jar: %v", err)
 	}
+	original := originalJarPath(root, "1.8.9", "server")
+	if err := os.WriteFile(original, []byte("not a real mojang jar"), 0o600); err != nil {
+		t.Fatalf("write stub original jar: %v", err)
+	}
 
 	payload := `{"defaultSlipperiness":0.6,"blockSlipperiness":{"ice":0.98},"sinTableBase64":"AAAAAA=="}`
 	javac := writeStubScript(t, root, "javac", "")
@@ -74,6 +80,41 @@ func TestDumpWritesDocumentFromStubbedJava(t *testing.T) {
 	}
 	if document.JarSHA256 == "" {
 		t.Fatal("jar digest was not recorded")
+	}
+
+	// The recorded digest must be Mojang's published jar, not the local remap.
+	wantDigest := sha256.Sum256([]byte("not a real mojang jar"))
+	if document.JarSHA256 != hex.EncodeToString(wantDigest[:]) {
+		t.Fatalf("jarSha256 = %q, want the original jar digest", document.JarSHA256)
+	}
+}
+
+func TestOriginalJarPath(t *testing.T) {
+	got := originalJarPath(filepath.Join("reference", "work"), "1.8.9", "server")
+	want := filepath.Join("reference", "work", "versions", "1.8.9", "server", "original.jar")
+	if got != want {
+		t.Fatalf("originalJarPath = %q, want %q", got, want)
+	}
+}
+
+func TestDumpRejectsMissingOriginalJar(t *testing.T) {
+	root := t.TempDir()
+	jar := namedJarPath(root, "1.8.9", "server")
+	if err := os.MkdirAll(filepath.Dir(jar), 0o750); err != nil {
+		t.Fatalf("create jar directory: %v", err)
+	}
+	if err := os.WriteFile(jar, []byte("not a real jar"), 0o600); err != nil {
+		t.Fatalf("write stub jar: %v", err)
+	}
+
+	err := Dump(context.Background(), Options{
+		ReferenceDir: root,
+		Version:      "1.8.9",
+		Side:         "server",
+		Output:       filepath.Join(t.TempDir(), "physics.json"),
+	})
+	if err == nil {
+		t.Fatal("Dump accepted a workspace with no original jar")
 	}
 }
 
