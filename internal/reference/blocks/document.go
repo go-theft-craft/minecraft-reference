@@ -29,13 +29,51 @@ import (
 // and answers about the wrong block every time.
 const StateEncodingChunk47 = "id<<4|meta"
 
+// StateEncodingRegistry775 names how protocol 775 identifies a block state.
+//
+// There is no arithmetic here at all, which is the difference worth recording.
+// A state identifier is an index into the game's own registry of every possible
+// state, assigned in registration order, and nothing about it can be shifted or
+// masked back into a block identifier. A consumer holding one of these has to
+// look it up in the ranges this document carries; a consumer that applies the
+// protocol 47 shift to it gets a plausible number for an unrelated block.
+const StateEncodingRegistry775 = "block-state-registry"
+
+// StateRange is the span of state identifiers one block owns.
+//
+// The states of a block are contiguous, so a range says which states belong to
+// it in two numbers rather than in the several thousand a per-state table would
+// need. That the states really are contiguous is checked rather than assumed:
+// ParseDocument rejects ranges that overlap or leave a gap, because either one
+// silently answers about the wrong block.
+type StateRange struct {
+	From int `json:"from"`
+	To   int `json:"to"`
+}
+
+// StateException is one state that disagrees with the rest of its block.
+//
+// It exists for a single block in 26.1.2 and is carried anyway, because that
+// block is the reason this document cannot be keyed by block. Every wall in the
+// game is registered forceSolidOn, which settles the answer for all of its
+// states at once — except resin_brick_wall, which is not, so its states fall
+// through to the collision shape and the unconnected ones come back empty. A
+// document that recorded one answer per block would state the wrong one for
+// those states and nothing downstream could tell.
+type StateException struct {
+	State          int  `json:"state"`
+	BlocksMovement bool `json:"blocksMovement"`
+}
+
 // Block is what one block does to something trying to occupy it.
 //
-// The facts are per block rather than per state because in this version they
-// are. Material hangs off Block, not off IBlockState, so every state of one
-// block blocks movement or does not together. A later version splits them, and
-// a document for that version will have to be keyed by state; recording the
-// encoding above is what lets a consumer tell which it is holding.
+// Whether the facts are per block or per state depends on the version, which is
+// what StateEncoding distinguishes. Under StateEncodingChunk47 they are per
+// block: Material hangs off Block, not off IBlockState, so every state of one
+// block answers together and neither StateRange nor StateExceptions is
+// carried. Under StateEncodingRegistry775 the answer hangs off the state, so
+// every block carries the range of states it owns, and the rare block whose
+// states disagree carries the ones that differ.
 type Block struct {
 	// ID is the numeric block identifier, which is a chunk state identifier
 	// shifted right four.
@@ -55,6 +93,18 @@ type Block struct {
 	// rather than a boolean, so it was neither used now nor sufficient later.
 	// A field in a published document is far harder to remove than to add.
 	BlocksMovement bool `json:"blocksMovement"`
+	// StateRange is the span of state identifiers this block owns, for a
+	// version whose states are registry indices. It is absent for a version
+	// whose state identifier is arithmetic on the block identifier.
+	//
+	// It is a pointer rather than a pair of plain integers because air owns
+	// exactly state 0, and a range of zero to zero is indistinguishable from an
+	// absent one in any encoding that omits empty values.
+	StateRange *StateRange `json:"stateRange,omitempty"`
+	// StateExceptions lists the states of this block that answer differently
+	// from BlocksMovement. It is empty for all but one block in the versions
+	// measured so far, and dropping it would make that block wrong.
+	StateExceptions []StateException `json:"stateExceptions,omitempty"`
 }
 
 // Document is the extracted block record for one version.
@@ -107,7 +157,92 @@ func ParseDocument(raw []byte) (Document, error) {
 		seen[block.ID] = struct{}{}
 	}
 
+	if err := validateStates(document); err != nil {
+		return Document{}, err
+	}
+
 	return document, nil
+}
+
+// validateStates checks the parts of a document that depend on how the version
+// identifies a state.
+//
+// Both halves refuse a document that is merely inconsistent rather than
+// malformed, because that is the failure this data has. A state table with a
+// gap in it does not fail to load; it answers "unknown" for a handful of real
+// blocks, and the consumer treats unknown as impassable, so a bot stops in
+// front of nothing and no error is ever printed.
+func validateStates(document Document) error {
+	switch document.StateEncoding {
+	case StateEncodingChunk47:
+		// This encoding derives the block from the state by shifting, so a
+		// range would be a second, redundant answer to the same question, and
+		// two answers that can disagree are worse than one.
+		for _, block := range document.Blocks {
+			if block.StateRange != nil || len(block.StateExceptions) != 0 {
+				return fmt.Errorf(
+					"block %q carries state detail, which encoding %q derives by shifting instead",
+					block.Name, document.StateEncoding,
+				)
+			}
+		}
+
+		return nil
+	case StateEncodingRegistry775:
+		return validateStateRanges(document)
+	default:
+		return fmt.Errorf("unknown state encoding %q", document.StateEncoding)
+	}
+}
+
+func validateStateRanges(document Document) error {
+	ranges := make([]Block, 0, len(document.Blocks))
+	for _, block := range document.Blocks {
+		if block.StateRange == nil {
+			return fmt.Errorf("block %q carries no state range", block.Name)
+		}
+		if block.StateRange.From < 0 || block.StateRange.To < block.StateRange.From {
+			return fmt.Errorf(
+				"block %q has state range %d..%d",
+				block.Name, block.StateRange.From, block.StateRange.To,
+			)
+		}
+		for _, exception := range block.StateExceptions {
+			if exception.State < block.StateRange.From || exception.State > block.StateRange.To {
+				return fmt.Errorf(
+					"block %q has an exception for state %d outside its range %d..%d",
+					block.Name, exception.State, block.StateRange.From, block.StateRange.To,
+				)
+			}
+			// An exception that agrees with its block says nothing and hides
+			// the ones that do, so it is a mistake rather than a redundancy.
+			if exception.BlocksMovement == block.BlocksMovement {
+				return fmt.Errorf(
+					"block %q has an exception for state %d that agrees with the block",
+					block.Name, exception.State,
+				)
+			}
+		}
+		ranges = append(ranges, block)
+	}
+
+	sort.Slice(ranges, func(i, j int) bool { return ranges[i].StateRange.From < ranges[j].StateRange.From })
+
+	// Every state the wire can carry has to land in exactly one range. A gap
+	// reads as an unknown block and an overlap picks whichever range is
+	// searched first, and neither announces itself.
+	next := 0
+	for _, block := range ranges {
+		if block.StateRange.From != next {
+			return fmt.Errorf(
+				"state %d is not described: block %q starts its range at %d",
+				next, block.Name, block.StateRange.From,
+			)
+		}
+		next = block.StateRange.To + 1
+	}
+
+	return nil
 }
 
 // BlockID returns the block identifier a packed state refers to.
