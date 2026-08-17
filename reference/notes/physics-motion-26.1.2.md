@@ -5,6 +5,12 @@ Read from `reference/work/sources/26.1.2/server/`, and every value marked
 rather than read. Recorded by: OCharnyshevich. Date: 2026-08-17.
 No source text is reproduced here, only measured values and their locations.
 
+Every transcribed constant here was confirmed twice, as M8.1's rule requires:
+once from the decompiled source and once from
+`javap -p -c` over the shipped jar, which is an independent path from the same
+bytecode. The bytecode reading is quoted per constant below, because it also
+settles the widths — an `fmul` and a `dmul` are visible where a decimal is not.
+
 The split between what a dumper reaches and what a person transcribes falls
 differently from 1.8.9's, and in both directions. Two constants that were
 literals there are attributes here, so they are now dumped. Two that were
@@ -18,8 +24,13 @@ literals there are literals still.
 - **Step height: `0.6`** — *dumped*, the player's base value for the step-height
   attribute.
 - Horizontal drag: `0.91F` = `0.9100000262260437` — from the land branch of
-  `LivingEntity.travel`, which multiplies the block's friction by it.
-- Vertical drag: `0.98F` = `0.9800000190734863` — from the same branch.
+  `LivingEntity.travel`, which multiplies the block's friction by it. Confirmed
+  in bytecode: `ldc_w float 0.91f` followed by `fmul`, so the friction product
+  is formed at single width.
+- Vertical drag: `0.98F` = `0.9800000190734863` — from the same branch. Confirmed
+  in bytecode: `ldc_w float 0.98f` followed by `dmul`, so the constant is widened
+  and the product is formed at double width against the motion. The same three
+  `dmul` instructions carry the horizontal drag, which settles that one too.
 - **Movement speed: `0.10000000149011612`** — *dumped*, the player's base value
   for the movement-speed attribute. It is the widened `float` 0.1F rather than
   the round decimal, and it is the player's own value: the attribute's generic
@@ -29,7 +40,8 @@ literals there are literals still.
 
 **The step height is a `double` here and a `float` there, and it still arrives as
 a `float`.** The attribute holds `0.6` exactly, and `LivingEntity.maxUpStep`
-narrows the attribute's value to a `float` where it is read. So the number the
+narrows the attribute's value to a `float` where it is read — visible in bytecode
+as `getAttributeValue:(...)D` immediately followed by `d2f`. So the number the
 step-up applies is `float64(float32(0.6))` = `0.6000000238418579`, the same value
 1.8.9 applies from a `float` field — reached by a different route. A consumer
 that took the attribute's `0.6` and used it directly would be wrong by two parts
@@ -55,7 +67,10 @@ reproduce a tick with them:
 
 - The ground acceleration divides `0.21600002F` by the cube of the **block's own
   friction**. 1.8.9 divides `0.16277136F` by the cube of the **friction
-  product** — the block's friction already multiplied by `0.91F`.
+  product** — the block's friction already multiplied by `0.91F`. Confirmed in
+  bytecode: `getSpeed()F`, `ldc_w float 0.21600002f`, then `fmul fmul fdiv fmul`,
+  so the cube, the division, and the product with the speed are all at single
+  width.
 - The input vector is normalized at `double` width against a threshold of
   `1.0E-7`, where 1.8.9 works at `float` width against `1.0E-4F`.
 - The trigonometry table is unchanged — bit for bit identical to 1.8.9's 65,536
