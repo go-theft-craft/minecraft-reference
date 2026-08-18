@@ -50,12 +50,23 @@ jobs:
       - name: Install Devbox
         uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
 
-      # tools.json contains the pinned mapping-tool hashes and Vineflower version.
-      - name: Restore reference cache
+      # The pinned tools are the same jars for every version, so the whole
+      # matrix shares one entry instead of storing 46 copies of Vineflower.
+      # tools.json carries their versions and hashes.
+      - name: Restore pinned tool cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: reference/work/cache
-          key: reference-${{ runner.os }}-${{ matrix.version }}-${{ matrix.side }}-${{ hashFiles('internal/reference/config/defaults/tools.json') }}
+          path: reference/work/cache/tools
+          key: reference-tools-${{ runner.os }}-${{ hashFiles('internal/reference/config/defaults/tools.json') }}
+
+      # Mojang metadata is per version and immutable once released. It has
+      # nothing to do with the pinned tools, so changing one no longer discards
+      # the other.
+      - name: Restore version metadata cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: reference/work/cache/metadata
+          key: reference-metadata-${{ runner.os }}-${{ matrix.version }}
 
       - name: Prepare reference
         env:
