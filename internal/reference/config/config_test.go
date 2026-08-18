@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadToolsRejectsMalformedDigest(t *testing.T) {
@@ -116,8 +117,9 @@ func TestEmbeddedDefaultsContainInitialStableFamilyCatalog(t *testing.T) {
 			t.Errorf("version %d: got %#v, want %#v", index, got, want)
 			continue
 		}
-		if got.ReleaseDate == "" || got.VerifiedDate != "2026-08-14" {
-			t.Errorf("version %s has incomplete release evidence dates: released=%q verified=%q", got.ID, got.ReleaseDate, got.VerifiedDate)
+		released, verified := parseEvidenceDate(t, got.ID, "release_date", got.ReleaseDate), parseEvidenceDate(t, got.ID, "verified_date", got.VerifiedDate)
+		if !released.IsZero() && !verified.IsZero() && verified.Before(released) {
+			t.Errorf("version %s was verified %q before it was released %q", got.ID, got.VerifiedDate, got.ReleaseDate)
 		}
 		gotSides := make([]string, 0, len(got.Sides))
 		for _, side := range []string{"client", "server"} {
@@ -138,6 +140,23 @@ func TestEmbeddedDefaultsContainInitialStableFamilyCatalog(t *testing.T) {
 			t.Errorf("version %s sides: got %v, want %v", got.ID, gotSides, want.sides)
 		}
 	}
+}
+
+// parseEvidenceDate requires a release evidence date to be present and to use
+// the YYYY-MM-DD form. Each version carries its own dates, so a re-verified
+// version moves independently of the rest of the catalog.
+func parseEvidenceDate(t *testing.T, versionID, field, value string) time.Time {
+	t.Helper()
+	if value == "" {
+		t.Errorf("version %s is missing %s", versionID, field)
+		return time.Time{}
+	}
+	parsed, err := time.Parse(time.DateOnly, value)
+	if err != nil {
+		t.Errorf("version %s field %s = %q, want YYYY-MM-DD", versionID, field, value)
+		return time.Time{}
+	}
+	return parsed
 }
 
 func TestLoadVersionsRejectsMissingJavaRequirement(t *testing.T) {

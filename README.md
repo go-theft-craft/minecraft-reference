@@ -28,7 +28,7 @@ The newest releases appear first.
 | Family | Tested release | Released | Verified | Minimum JDK | Mapping source | Tested sides |
 | --- | --- | --- | --- | ---: | --- | --- |
 | 26.2 | `26.2` | 2026-06-16 | 2026-08-14 | 25 | Names distributed with the game | client and server |
-| 26.1 | `26.1.2` | 2026-04-09 | 2026-08-14 | 25 | Names distributed with the game | client and server |
+| 26.1 | `26.1.2` | 2026-04-09 | 2026-08-17 | 25 | Names distributed with the game | client and server |
 | 1.21 | `1.21.11` | 2025-12-09 | 2026-08-14 | 21 | Mojang client and server mappings | client and server |
 | 1.20 | `1.20.6` | 2024-04-29 | 2026-08-14 | 21 | Mojang client and server mappings | client and server |
 | 1.19 | `1.19.4` | 2023-03-14 | 2026-08-14 | 17 | Mojang client and server mappings | client and server |
