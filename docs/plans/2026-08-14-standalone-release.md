@@ -1,5 +1,12 @@
 # Standalone mcreference release implementation plan
 
+> **Status: complete, 2026-08-18.** This repository is standalone, published,
+> and released at `v1.0.1`, with `ci.yml`, `compatibility.yml`, and
+> `release.yml`. Consumers run the released command by version rather than a
+> copy: `minecraft-simulation`'s `Taskfile.yml` invokes
+> `mcreference@{{.MCREFERENCE_VERSION}}`. The checkboxes below were never ticked
+> and are not evidence; do not re-run this plan.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development or execute this plan inline one task at a time. Steps use checkbox syntax for tracking.
 
 **Goal:** Move `mcreference` into `minecraft-reference` and publish standalone binaries with GoReleaser.

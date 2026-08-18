@@ -1,5 +1,13 @@
 # Stable Minecraft Family Support Implementation Plan
 
+> **Status: complete, 2026-08-18.** Shipped: the embedded catalog, the three
+> naming strategies, the maintenance command (`cmd/mcversionupdate`), the weekly
+> `update-minecraft-versions.yml` workflow, and the compatibility gate. The
+> generated support table in `README.md` carries one tested representative per
+> family from 1.0 through 26.2, each with the JDK major it was tested under and
+> the date its compatibility run was accepted. The checkboxes below were never
+> ticked and are not evidence; do not re-run this plan.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Support one tested stable Java Edition release from every release family, update representatives weekly, and advertise only versions whose available sides pass full compatibility tests.
