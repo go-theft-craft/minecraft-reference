@@ -4,14 +4,17 @@ import (
 	"context"
 	"crypto/sha1"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 const trustedFixtureURL = "https://piston-data.mojang.com/test/artifact.bin"
@@ -236,4 +239,200 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (roundTrip roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return roundTrip(request)
+}
+
+// recordingSleeper stands in for the retry wait so tests observe the backoff
+// schedule without serving it.
+func recordingSleeper(delays *[]time.Duration) func(context.Context, time.Duration) error {
+	return func(_ context.Context, delay time.Duration) error {
+		*delays = append(*delays, delay)
+		return nil
+	}
+}
+
+func TestDownloadRetriesThrottledResponse(t *testing.T) {
+	payload := []byte("minecraft fixture")
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		requests++
+		switch requests {
+		case 1:
+			writer.WriteHeader(http.StatusTooManyRequests)
+		case 2:
+			writer.WriteHeader(http.StatusServiceUnavailable)
+		default:
+			_, _ = writer.Write(payload)
+		}
+	}))
+	defer server.Close()
+
+	var delays []time.Duration
+	digest := sha1.Sum(payload)
+	destination := filepath.Join(t.TempDir(), "artifact.bin")
+	downloader := Downloader{Client: rewriteHostClient(t, server, "piston-data.mojang.com"), sleep: recordingSleeper(&delays)}
+
+	result, err := downloader.Download(context.Background(), DownloadSpec{URL: trustedFixtureURL, Size: int64(len(payload)), SHA1: fmt.Sprintf("%x", digest)}, destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requests != 3 {
+		t.Errorf("made %d requests, want 3", requests)
+	}
+	if result.Size != int64(len(payload)) {
+		t.Errorf("downloaded %d bytes, want %d", result.Size, len(payload))
+	}
+	if want := []time.Duration{initialRetryDelay, 2 * initialRetryDelay}; !reflect.DeepEqual(delays, want) {
+		t.Errorf("backoff delays %v, want %v", delays, want)
+	}
+}
+
+func TestDownloadHonoursRetryAfter(t *testing.T) {
+	payload := []byte("minecraft fixture")
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		requests++
+		if requests == 1 {
+			writer.Header().Set("Retry-After", "7")
+			writer.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = writer.Write(payload)
+	}))
+	defer server.Close()
+
+	var delays []time.Duration
+	digest := sha1.Sum(payload)
+	downloader := Downloader{Client: rewriteHostClient(t, server, "piston-data.mojang.com"), sleep: recordingSleeper(&delays)}
+
+	if _, err := downloader.Download(context.Background(), DownloadSpec{URL: trustedFixtureURL, SHA1: fmt.Sprintf("%x", digest)}, filepath.Join(t.TempDir(), "artifact.bin")); err != nil {
+		t.Fatal(err)
+	}
+	if want := []time.Duration{7 * time.Second}; !reflect.DeepEqual(delays, want) {
+		t.Errorf("backoff delays %v, want %v", delays, want)
+	}
+}
+
+func TestDownloadCapsRetryAfterAtMaximumDelay(t *testing.T) {
+	payload := []byte("minecraft fixture")
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		requests++
+		if requests == 1 {
+			writer.Header().Set("Retry-After", "86400")
+			writer.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = writer.Write(payload)
+	}))
+	defer server.Close()
+
+	var delays []time.Duration
+	digest := sha1.Sum(payload)
+	downloader := Downloader{Client: rewriteHostClient(t, server, "piston-data.mojang.com"), sleep: recordingSleeper(&delays)}
+
+	if _, err := downloader.Download(context.Background(), DownloadSpec{URL: trustedFixtureURL, SHA1: fmt.Sprintf("%x", digest)}, filepath.Join(t.TempDir(), "artifact.bin")); err != nil {
+		t.Fatal(err)
+	}
+	if want := []time.Duration{maxRetryDelay}; !reflect.DeepEqual(delays, want) {
+		t.Errorf("backoff delays %v, want %v", delays, want)
+	}
+}
+
+func TestDownloadGivesUpAfterMaximumAttempts(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		requests++
+		writer.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	var delays []time.Duration
+	destination := filepath.Join(t.TempDir(), "artifact.bin")
+	downloader := Downloader{Client: rewriteHostClient(t, server, "piston-data.mojang.com"), sleep: recordingSleeper(&delays)}
+
+	_, err := downloader.Download(context.Background(), DownloadSpec{URL: trustedFixtureURL, SHA1: fmt.Sprintf("%x", sha1.Sum(nil))}, destination)
+	if err == nil {
+		t.Fatal("expected the throttled download to fail")
+	}
+	if !strings.Contains(err.Error(), "429") || !strings.Contains(err.Error(), "after 5 attempts") {
+		t.Errorf("got %v", err)
+	}
+	if requests != maxDownloadAttempts {
+		t.Errorf("made %d requests, want %d", requests, maxDownloadAttempts)
+	}
+	if _, statErr := os.Stat(destination); !os.IsNotExist(statErr) {
+		t.Errorf("destination exists after failure: %v", statErr)
+	}
+}
+
+func TestDownloadDoesNotRetryClientRejection(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		requests++
+		writer.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	downloader := Downloader{Client: rewriteHostClient(t, server, "piston-data.mojang.com"), sleep: func(context.Context, time.Duration) error {
+		t.Error("waited before retrying a 404")
+		return nil
+	}}
+	if _, err := downloader.Download(context.Background(), DownloadSpec{URL: trustedFixtureURL, SHA1: fmt.Sprintf("%x", sha1.Sum(nil))}, filepath.Join(t.TempDir(), "artifact.bin")); err == nil {
+		t.Fatal("expected the missing artifact to fail")
+	}
+	if requests != 1 {
+		t.Errorf("made %d requests, want 1", requests)
+	}
+}
+
+func TestDownloadRetryRewindsPartialBody(t *testing.T) {
+	payload := []byte("minecraft fixture")
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		requests++
+		if requests == 1 {
+			writer.Header().Set("Content-Length", fmt.Sprint(len(payload)+8))
+			_, _ = writer.Write(payload[:4])
+			return
+		}
+		_, _ = writer.Write(payload)
+	}))
+	defer server.Close()
+
+	var delays []time.Duration
+	digest := sha1.Sum(payload)
+	downloader := Downloader{Client: rewriteHostClient(t, server, "piston-data.mojang.com"), sleep: recordingSleeper(&delays)}
+
+	result, err := downloader.Download(context.Background(), DownloadSpec{URL: trustedFixtureURL, Size: int64(len(payload)), SHA1: fmt.Sprintf("%x", digest)}, filepath.Join(t.TempDir(), "artifact.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requests != 2 {
+		t.Errorf("made %d requests, want 2", requests)
+	}
+	if result.Size != int64(len(payload)) {
+		t.Errorf("downloaded %d bytes, want %d", result.Size, len(payload))
+	}
+}
+
+func TestDownloadStopsRetryingOnCancelledContext(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		requests++
+		writer.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	downloader := Downloader{Client: rewriteHostClient(t, server, "piston-data.mojang.com"), sleep: func(context.Context, time.Duration) error {
+		cancel()
+		return ctx.Err()
+	}}
+	_, err := downloader.Download(ctx, DownloadSpec{URL: trustedFixtureURL, SHA1: fmt.Sprintf("%x", sha1.Sum(nil))}, filepath.Join(t.TempDir(), "artifact.bin"))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v, want a cancelled context", err)
+	}
+	if requests != 1 {
+		t.Errorf("made %d requests, want 1", requests)
+	}
 }

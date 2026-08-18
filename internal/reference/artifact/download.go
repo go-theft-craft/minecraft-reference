@@ -14,12 +14,21 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 )
 
 const (
 	maxArtifactSize = int64(2 << 30)
 	maxRedirects    = 10
+
+	// Artifact hosts throttle the compatibility matrix, which fetches the same
+	// pinned tools from every job at once. Every download is digest verified,
+	// so a repeated attempt cannot widen what a caller ends up trusting.
+	maxDownloadAttempts = 5
+	initialRetryDelay   = time.Second
+	maxRetryDelay       = 30 * time.Second
 )
 
 var mojangHosts = map[string]struct{}{
@@ -52,10 +61,36 @@ type DownloadResult struct {
 	Cached bool   `json:"cached"`
 }
 
-// Downloader downloads and atomically caches verified artifacts.
+// Downloader downloads and atomically caches verified artifacts. It retries
+// throttled and transient responses with exponential backoff.
 type Downloader struct {
 	Client *http.Client
+
+	// sleep waits out a retry delay. Tests replace it to avoid real waiting.
+	sleep func(context.Context, time.Duration) error
 }
+
+// retryableError marks a download failure that a later attempt may survive.
+// after carries the delay the server asked for, and is zero when it named none.
+type retryableError struct {
+	after time.Duration
+	err   error
+}
+
+func (e retryableError) Error() string { return e.err.Error() }
+
+func (e retryableError) Unwrap() error { return e.err }
+
+// policyError marks a request the downloader itself refused, such as a
+// redirect leaving the trusted hosts. The host never gets a say, so no later
+// attempt can turn the refusal into a download.
+type policyError struct {
+	err error
+}
+
+func (e policyError) Error() string { return e.err.Error() }
+
+func (e policyError) Unwrap() error { return e.err }
 
 // Download returns a verified cache entry, downloading it when necessary.
 func (d Downloader) Download(ctx context.Context, spec DownloadSpec, destination string) (DownloadResult, error) {
@@ -82,31 +117,9 @@ func (d Downloader) Download(ctx context.Context, spec DownloadSpec, destination
 	temporaryPath := temporary.Name()
 	defer func() { _ = os.Remove(temporaryPath) }()
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, spec.URL, nil)
-	if err != nil {
+	if err := d.fetch(ctx, spec, temporary); err != nil {
 		_ = temporary.Close()
-		return DownloadResult{}, fmt.Errorf("create download request: %w", err)
-	}
-	client := d.client(spec)
-	response, err := client.Do(request)
-	if err != nil {
-		_ = temporary.Close()
-		return DownloadResult{}, fmt.Errorf("download %s: %w", spec.URL, err)
-	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode != http.StatusOK {
-		_ = temporary.Close()
-		return DownloadResult{}, fmt.Errorf("download %s: unexpected HTTP status %s", spec.URL, response.Status)
-	}
-
-	written, err := io.Copy(temporary, io.LimitReader(response.Body, maxArtifactSize+1))
-	if err != nil {
-		_ = temporary.Close()
-		return DownloadResult{}, fmt.Errorf("write download %s: %w", spec.URL, err)
-	}
-	if written > maxArtifactSize {
-		_ = temporary.Close()
-		return DownloadResult{}, fmt.Errorf("download %s exceeds %d bytes", spec.URL, maxArtifactSize)
+		return DownloadResult{}, err
 	}
 	if err := temporary.Sync(); err != nil {
 		_ = temporary.Close()
@@ -126,6 +139,127 @@ func (d Downloader) Download(ctx context.Context, spec DownloadSpec, destination
 	result.Path = destination
 	result.URL = spec.URL
 	return result, nil
+}
+
+// fetch writes the artifact into temporary, retrying throttled and transient
+// responses until one succeeds or the attempts run out. Each attempt rewinds
+// temporary, so a body that fails midway leaves nothing behind for the next.
+func (d Downloader) fetch(ctx context.Context, spec DownloadSpec, temporary *os.File) error {
+	client := d.client(spec)
+	delay := initialRetryDelay
+	for attempt := 1; ; attempt++ {
+		err := fetchOnce(ctx, client, spec, temporary)
+		if err == nil {
+			return nil
+		}
+		var retryable retryableError
+		if !errors.As(err, &retryable) {
+			return err
+		}
+		if attempt == maxDownloadAttempts {
+			return fmt.Errorf("after %d attempts: %w", attempt, err)
+		}
+		pause := delay
+		if retryable.after > 0 {
+			pause = retryable.after
+		}
+		if err := d.wait(ctx, min(pause, maxRetryDelay)); err != nil {
+			return fmt.Errorf("download %s: %w", spec.URL, err)
+		}
+		delay = min(delay*2, maxRetryDelay)
+	}
+}
+
+func fetchOnce(ctx context.Context, client *http.Client, spec DownloadSpec, temporary *os.File) error {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, spec.URL, nil)
+	if err != nil {
+		return fmt.Errorf("create download request: %w", err)
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return transientError(ctx, fmt.Errorf("download %s: %w", spec.URL, err))
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		failure := fmt.Errorf("download %s: unexpected HTTP status %s", spec.URL, response.Status)
+		if retryableStatus(response.StatusCode) {
+			return retryableError{after: retryAfter(response), err: failure}
+		}
+		return failure
+	}
+
+	if err := temporary.Truncate(0); err != nil {
+		return fmt.Errorf("reset temporary download: %w", err)
+	}
+	if _, err := temporary.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("reset temporary download: %w", err)
+	}
+	written, err := io.Copy(temporary, io.LimitReader(response.Body, maxArtifactSize+1))
+	if err != nil {
+		return transientError(ctx, fmt.Errorf("write download %s: %w", spec.URL, err))
+	}
+	if written > maxArtifactSize {
+		return fmt.Errorf("download %s exceeds %d bytes", spec.URL, maxArtifactSize)
+	}
+	return nil
+}
+
+// transientError marks a connection-level failure as worth another attempt,
+// unless the caller's context is what ended it or the downloader is the one
+// that refused the request.
+func transientError(ctx context.Context, err error) error {
+	if ctx.Err() != nil {
+		return err
+	}
+	var policy policyError
+	if errors.As(err, &policy) {
+		return err
+	}
+	return retryableError{err: err}
+}
+
+// retryableStatus reports whether a status is a host asking to be tried later
+// rather than a verdict on the request itself.
+func retryableStatus(status int) bool {
+	if status == http.StatusTooManyRequests || status == http.StatusRequestTimeout {
+		return true
+	}
+	return status >= http.StatusInternalServerError && status != http.StatusNotImplemented
+}
+
+// retryAfter reads the delay a host asked for, in either of the forms RFC 9110
+// allows. An absent, malformed, or past value reads as no request at all.
+func retryAfter(response *http.Response) time.Duration {
+	value := strings.TrimSpace(response.Header.Get("Retry-After"))
+	if value == "" {
+		return 0
+	}
+	if seconds, err := strconv.Atoi(value); err == nil {
+		if seconds <= 0 {
+			return 0
+		}
+		return time.Duration(seconds) * time.Second
+	}
+	if date, err := http.ParseTime(value); err == nil {
+		if delay := time.Until(date); delay > 0 {
+			return delay
+		}
+	}
+	return 0
+}
+
+func (d Downloader) wait(ctx context.Context, delay time.Duration) error {
+	if d.sleep != nil {
+		return d.sleep(ctx, delay)
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func validateSpec(spec DownloadSpec) error {
@@ -211,10 +345,10 @@ func clientWithURLPolicy(base *http.Client, validate func(*url.URL) error) *http
 	previousCheckRedirect := client.CheckRedirect
 	client.CheckRedirect = func(request *http.Request, via []*http.Request) error {
 		if err := validate(request.URL); err != nil {
-			return fmt.Errorf("reject redirect target: %w", err)
+			return policyError{fmt.Errorf("reject redirect target: %w", err)}
 		}
 		if len(via) >= maxRedirects {
-			return fmt.Errorf("stopped after %d redirects", maxRedirects)
+			return policyError{fmt.Errorf("stopped after %d redirects", maxRedirects)}
 		}
 		if previousCheckRedirect != nil {
 			return previousCheckRedirect(request, via)
