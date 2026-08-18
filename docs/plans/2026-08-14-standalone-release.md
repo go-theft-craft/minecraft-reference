@@ -4,8 +4,9 @@
 > and released at `v1.0.1`, with `ci.yml`, `compatibility.yml`, and
 > `release.yml`. Consumers run the released command by version rather than a
 > copy: `minecraft-simulation`'s `Taskfile.yml` invokes
-> `mcreference@{{.MCREFERENCE_VERSION}}`. The checkboxes below were never ticked
-> and are not evidence; do not re-run this plan.
+> `mcreference@{{.MCREFERENCE_VERSION}}`. The boxes below are ticked by
+> outcome, checked against both repositories on 2026-08-18. Do not re-run this
+> plan.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development or execute this plan inline one task at a time. Steps use checkbox syntax for tracking.
 
@@ -81,10 +82,10 @@
 - Consumes: the versioned `mcreference` command from `minecraft-reference`.
 - Produces: a protocol-independent simulation module without Java tooling code.
 
-- [ ] **Step 1:** Remove the copied command and its implementation packages.
-- [ ] **Step 2:** keep the restricted-artifact check and ignored workspace.
-- [ ] **Step 3:** Add Task wrappers that run the external command.
-- [ ] **Step 4:** Run `devbox run -- task verify`.
+- [x] **Step 1:** Remove the copied command and its implementation packages.
+- [x] **Step 2:** keep the restricted-artifact check and ignored workspace.
+- [x] **Step 3:** Add Task wrappers that run the external command.
+- [x] **Step 4:** Run `devbox run -- task verify`.
 
 ### Task 4: Publish both repositories
 
@@ -94,7 +95,7 @@
 
 - Produces: public `go-theft-craft/minecraft-reference` and `go-theft-craft/minecraft-simulation` repositories on `main`.
 
-- [ ] **Step 1:** Review both staged diffs and scan for restricted artifacts.
-- [ ] **Step 2:** Commit each repository with a focused message.
-- [ ] **Step 3:** Create missing GitHub repositories and push `main`.
-- [ ] **Step 4:** Verify remote branch heads and GitHub Actions runs.
+- [x] **Step 1:** Review both staged diffs and scan for restricted artifacts.
+- [x] **Step 2:** Commit each repository with a focused message.
+- [x] **Step 3:** Create missing GitHub repositories and push `main`.
+- [x] **Step 4:** Verify remote branch heads and GitHub Actions runs.

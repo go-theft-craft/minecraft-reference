@@ -5,8 +5,9 @@
 > `update-minecraft-versions.yml` workflow, and the compatibility gate. The
 > generated support table in `README.md` carries one tested representative per
 > family from 1.0 through 26.2, each with the JDK major it was tested under and
-> the date its compatibility run was accepted. The checkboxes below were never
-> ticked and are not evidence; do not re-run this plan.
+> the date its compatibility run was accepted. The boxes below are ticked by
+> outcome, checked against this repository on 2026-08-18. Do not re-run this
+> plan.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -44,7 +45,7 @@
 - Produces: `config.Version`, `config.Mapping`, `config.Validation`, `Version.SupportsSide(string) bool`, `config.ReadVersionFile`, and `config.WriteVersionFile`.
 - Consumes: Existing `LoadVersions`, `RequireVersion`, and embedded JSON loading.
 
-- [ ] **Step 1: Write failing configuration tests**
+- [x] **Step 1: Write failing configuration tests**
 
 Add table-driven tests for a complete entry, duplicate families, unknown sides,
 missing mapping data, and empty validation limits. Use this fixture shape:
@@ -68,7 +69,7 @@ data := []byte(`{
 Assert that `SupportsSide("client")` is true, `SupportsSide("invalid")` is
 false, and malformed entries return errors that name the version and field.
 
-- [ ] **Step 2: Run the configuration tests and confirm failure**
+- [x] **Step 2: Run the configuration tests and confirm failure**
 
 Run:
 
@@ -79,7 +80,7 @@ devbox run -- go test ./internal/reference/config
 Expected: compilation fails because the new fields and `SupportsSide` do not
 exist.
 
-- [ ] **Step 3: Add the catalog types and validation**
+- [x] **Step 3: Add the catalog types and validation**
 
 Use these types:
 
@@ -126,7 +127,7 @@ family and writes atomically.
 Keep the two current versions valid with temporary minimums of `1`. Later
 acceptance runs replace those values with measured floors.
 
-- [ ] **Step 4: Run tests and inspect the configuration diff**
+- [x] **Step 4: Run tests and inspect the configuration diff**
 
 Run:
 
@@ -149,7 +150,7 @@ Expected: tests pass and the diff contains no whitespace errors.
 - Produces: `artifact.Release`, `Resolver.ListReleases(context.Context)`, `VersionMetadata.JavaVersion`, and URL policy checks used by every download.
 - Consumes: `artifact.Resolver`, `artifact.Downloader`, and Mojang's v2 manifest.
 
-- [ ] **Step 1: Add failing release-list and Java-version tests**
+- [x] **Step 1: Add failing release-list and Java-version tests**
 
 Use an `httptest.Server` manifest with `release`, `snapshot`, and `old_beta`
 entries. Assert that `ListReleases` preserves `ID`, `Type`, `ReleaseTime`, URL,
@@ -161,7 +162,7 @@ and SHA-1. Add version metadata with:
 
 Assert that `DecodeVersion` returns Java major 21.
 
-- [ ] **Step 2: Add failing host and redirect tests**
+- [x] **Step 2: Add failing host and redirect tests**
 
 Cover these cases:
 
@@ -175,7 +176,7 @@ Cover these cases:
 Use a test client whose transport rewrites allowed test URLs to local servers.
 Do not weaken production host checks to make the fixtures pass.
 
-- [ ] **Step 3: Run the artifact tests and confirm failure**
+- [x] **Step 3: Run the artifact tests and confirm failure**
 
 Run:
 
@@ -186,7 +187,7 @@ devbox run -- go test ./internal/reference/artifact
 Expected: tests fail because release metadata, Java metadata, and URL policy do
 not exist.
 
-- [ ] **Step 4: Implement release metadata and URL policy**
+- [x] **Step 4: Implement release metadata and URL policy**
 
 Add:
 
@@ -212,7 +213,7 @@ tools. Configure `http.Client.CheckRedirect` so every redirect target passes
 the same policy. Mojang URLs require SHA-1 and configured tools require
 SHA-256.
 
-- [ ] **Step 5: Run focused and race tests**
+- [x] **Step 5: Run focused and race tests**
 
 Run:
 
@@ -236,7 +237,7 @@ Expected: all artifact tests pass.
 - Produces: `mapping.ParseTinyV1(io.Reader)`, `mapping.ParseProGuard(io.Reader)`, and `mapping.WriteSRG(io.Writer, Mapping) error`.
 - Consumes: `mapping.Remap` and SpecialSource's SRG input format.
 
-- [ ] **Step 1: Define failing Tiny v1 tests**
+- [x] **Step 1: Define failing Tiny v1 tests**
 
 Use a fixture with a class, field, constructor, method, array descriptor, and a
 descriptor that refers to another mapped class:
@@ -260,7 +261,7 @@ MD: a/d (Lb;[I)V net/minecraft/client/Minecraft/setWorld (Lnet/minecraft/world/W
 Reject duplicate classes, missing owners, unknown namespaces, malformed
 descriptors, and short records.
 
-- [ ] **Step 2: Define failing ProGuard tests**
+- [x] **Step 2: Define failing ProGuard tests**
 
 Use this fixture:
 
@@ -274,7 +275,7 @@ net.minecraft.world.World -> b:
 Expect the same SRG direction as the Tiny test. Cover line-number prefixes,
 constructors, arrays, primitives, inner classes, and comments.
 
-- [ ] **Step 3: Run mapping tests and confirm failure**
+- [x] **Step 3: Run mapping tests and confirm failure**
 
 Run:
 
@@ -284,7 +285,7 @@ devbox run -- go test ./internal/reference/mapping
 
 Expected: compilation fails because the parsers and mapping model do not exist.
 
-- [ ] **Step 4: Implement the shared mapping model**
+- [x] **Step 4: Implement the shared mapping model**
 
 Use explicit records rather than format-specific strings:
 
@@ -312,7 +313,7 @@ type Mapping struct {
 Build the complete class map before converting member descriptors. Sort output
 by record type, owner, name, and descriptor so generated SRG files are stable.
 
-- [ ] **Step 5: Implement both parsers and SRG output**
+- [x] **Step 5: Implement both parsers and SRG output**
 
 Tiny v1 already maps `official` to `named`. Mojang ProGuard files map named
 types to obfuscated types, so reverse that direction. Skip constructors because
@@ -322,7 +323,7 @@ descriptors before remapping them.
 Keep `Remap` unchanged except for accepting the generated SRG file. Preserve
 its input fingerprint and atomic output behavior.
 
-- [ ] **Step 6: Run focused tests and formatting**
+- [x] **Step 6: Run focused tests and formatting**
 
 Run:
 
@@ -346,7 +347,7 @@ Expected: all mapping tests pass.
 - Produces: `pipeline.prepareNamedJar(context.Context, namingOptions) (namedJar, []artifact.DownloadResult, error)`.
 - Consumes: `config.Version`, `artifact.VersionMetadata`, mapping parsers, `mapping.Remap`, and configured tools.
 
-- [ ] **Step 1: Write failing strategy tests**
+- [x] **Step 1: Write failing strategy tests**
 
 Test these paths with temporary jars and local mapping fixtures:
 
@@ -360,7 +361,7 @@ Test these paths with temporary jars and local mapping fixtures:
 
 Stub the remap runner through a package variable so tests do not launch Java.
 
-- [ ] **Step 2: Run pipeline tests and confirm failure**
+- [x] **Step 2: Run pipeline tests and confirm failure**
 
 Run:
 
@@ -370,7 +371,7 @@ devbox run -- go test ./internal/reference/pipeline
 
 Expected: tests fail because `prepareNamedJar` does not exist.
 
-- [ ] **Step 3: Implement `prepareNamedJar`**
+- [x] **Step 3: Implement `prepareNamedJar`**
 
 Use a focused input type:
 
@@ -397,13 +398,13 @@ For `mojang`, use the mapping download for the requested side. For `identity`,
 return the original analysis jar. Record every downloaded mapping in
 `manifest.lock.json`.
 
-- [ ] **Step 4: Move naming out of `Prepare`**
+- [x] **Step 4: Move naming out of `Prepare`**
 
 Leave version resolution, library downloads, server extraction, decompilation,
 and indexing in `prepare.go`. Replace its hard-coded 1.8.9 branch with one call
 to `prepareNamedJar` per side.
 
-- [ ] **Step 5: Run pipeline and full unit tests**
+- [x] **Step 5: Run pipeline and full unit tests**
 
 Run:
 
@@ -429,7 +430,7 @@ Expected: all tests pass and existing 1.8.9 behavior remains covered.
 - Produces: `pipeline.CompatibilityReport`, `validateOutput`, `<version>/<side>/compatibility.json`, and `catalog.Accept`.
 - Consumes: the named jar, `sources.jsonl`, `symbols.jsonl`, and `config.Validation`.
 
-- [ ] **Step 1: Write failing validation tests**
+- [x] **Step 1: Write failing validation tests**
 
 Create small jar and JSON Lines fixtures. Cover these failures independently:
 
@@ -442,7 +443,7 @@ Create small jar and JSON Lines fixtures. Cover these failures independently:
 
 Assert errors include version, side, observed value, and required value.
 
-- [ ] **Step 2: Define the report type**
+- [x] **Step 2: Define the report type**
 
 ```go
 type CompatibilityReport struct {
@@ -462,7 +463,7 @@ type CompatibilityReport struct {
 
 Do not include absolute paths, download URLs, timestamps, or machine names.
 
-- [ ] **Step 3: Run tests and confirm failure**
+- [x] **Step 3: Run tests and confirm failure**
 
 Run:
 
@@ -473,7 +474,7 @@ devbox run -- go test ./internal/reference/pipeline
 Expected: compilation fails because report and validation functions do not
 exist.
 
-- [ ] **Step 4: Implement validation before the lock file**
+- [x] **Step 4: Implement validation before the lock file**
 
 Count records with streaming scanners. Use the named jar ZIP index for class
 checks. Match required class names by final class-name segment so legacy
@@ -484,7 +485,7 @@ Write `compatibility.json` atomically only after validation passes. Write
 `manifest.lock.json` after every requested side passes. A failed version must
 not retain a successful final lock file from the current run.
 
-- [ ] **Step 5: Implement compatibility acceptance**
+- [x] **Step 5: Implement compatibility acceptance**
 
 Implement `catalog.Accept` with this signature:
 
@@ -504,7 +505,7 @@ mcversionupdate accept --config versions.json --reports reference/work/versions 
 Walk the report directory without following symlinks and write the output
 atomically.
 
-- [ ] **Step 6: Run tests and inspect a controlled fixture report**
+- [x] **Step 6: Run tests and inspect a controlled fixture report**
 
 Run:
 
@@ -527,7 +528,7 @@ Expected: tests pass and report JSON is deterministic.
 - Produces: 24 configured family representatives and their measured validation floors.
 - Consumes: mapping strategies and compatibility reports from Tasks 3 through 5.
 
-- [ ] **Step 1: Add pinned legacy mapping tools**
+- [x] **Step 1: Add pinned legacy mapping tools**
 
 Use commit `7e368b355f507d62085497195cfd4c79e532c450` from
 `GrylaMC/MCP_Archive`. Add these Tiny v1 files and SHA-256 values:
@@ -556,7 +557,7 @@ Document that MCP mappings have restrictive terms and are downloaded for local
 reference generation. The project does not redistribute the mapping files or
 their derived sources.
 
-- [ ] **Step 2: Add all 24 candidate versions**
+- [x] **Step 2: Add all 24 candidate versions**
 
 Add these representatives in ascending family order:
 
@@ -571,7 +572,7 @@ Use Java 8 through 1.16.5, Java 16 for 1.17.1, Java 17 for 1.18.2 and
 Configure only the client side for 1.0 and 1.1. Set candidate minimums to `1`
 until the acceptance command replaces them.
 
-- [ ] **Step 3: Run compatibility tests in bounded batches**
+- [x] **Step 3: Run compatibility tests in bounded batches**
 
 Use one shared cache and one reference directory per batch. Pass JDK 25 paths
 explicitly for the initial run:
@@ -589,7 +590,7 @@ mapping does not match its game jar, keep that version out of the support table
 and record the exact failed check in the implementation notes. Do not replace
 it with identity naming.
 
-- [ ] **Step 4: Accept measured floors**
+- [x] **Step 4: Accept measured floors**
 
 Run the acceptance command from Task 5:
 
@@ -607,7 +608,7 @@ never below 1. It preserves required classes `Minecraft` for clients and
 Run the full matrix again. Expected: all reports pass against the stored
 minimums.
 
-- [ ] **Step 5: Keep generated work out of Git**
+- [x] **Step 5: Keep generated work out of Git**
 
 Confirm `.gitignore` excludes compatibility workspaces, jars, mappings,
 sources, indexes, and local reports. Run:
@@ -636,7 +637,7 @@ Expected: no downloaded Minecraft or mapping artifact appears.
 - Produces: `mcversionupdate discover`, `matrix`, `accept`, and `readme` subcommands.
 - Consumes: Mojang releases, version metadata, embedded configuration, and compatibility reports.
 
-- [ ] **Step 1: Write failing family-selection tests**
+- [x] **Step 1: Write failing family-selection tests**
 
 Test release ordering with `1.20.5`, `1.20.6`, `1.21`, `1.21.11`, `26.1`,
 `26.1.2`, and `26.2`. Assert that the selector uses `releaseTime`, not lexical
@@ -656,7 +657,7 @@ For a new release, choose `mojang` only when both requested side mappings are
 present. Choose `identity` only as a candidate that still requires output
 validation. Never generate `mcp` automatically.
 
-- [ ] **Step 2: Write failing README generation tests**
+- [x] **Step 2: Write failing README generation tests**
 
 Place these markers around the current support table:
 
@@ -669,7 +670,7 @@ Assert stable family ordering, exact JDK values, readable mapping names, and
 `client` rather than `client and server` for 1.0 and 1.1. Assert that check mode
 returns an error when generated content differs.
 
-- [ ] **Step 3: Write failing CLI tests**
+- [x] **Step 3: Write failing CLI tests**
 
 Define these commands:
 
@@ -686,14 +687,14 @@ discovery exits successfully with an empty candidate list. A missing required
 JDK remains candidate metadata; CI decides whether its distribution is
 available.
 
-- [ ] **Step 4: Implement catalog selection and CLI commands**
+- [x] **Step 4: Implement catalog selection and CLI commands**
 
 `discover` fetches metadata only for new or replaced representatives. `matrix`
 prints GitHub-compatible JSON entries with `version`, `family`, `side`, and
 `java`. `accept` requires one passing report per configured side and calculates
 the 90-percent floors. `readme` changes only text between the markers.
 
-- [ ] **Step 5: Run tests and regenerate README**
+- [x] **Step 5: Run tests and regenerate README**
 
 Run:
 
@@ -718,7 +719,7 @@ Expected: tests pass and the README lists only accepted versions.
 - Produces: `task compatibility`, `task versions:check`, and a reusable Compatibility workflow.
 - Consumes: `mcreference`, `mcversionupdate matrix`, Devbox, and a JDK selected by Java major.
 
-- [ ] **Step 1: Add local Taskfile commands**
+- [x] **Step 1: Add local Taskfile commands**
 
 Add `JAVA` and `JAVAP` variables to `reference:prepare`. Add:
 
@@ -746,7 +747,7 @@ directory containing candidate `versions.json` and the tracked `tools.json`.
 
 Make `verify` run `versions:check`.
 
-- [ ] **Step 2: Test Taskfile argument propagation**
+- [x] **Step 2: Test Taskfile argument propagation**
 
 Run one client-only version with explicit executables:
 
@@ -756,7 +757,7 @@ devbox run -- task compatibility VERSIONS=1.0 SIDES=client JAVA="$(command -v ja
 
 Expected: preflight reports the selected Java and one passing report exists.
 
-- [ ] **Step 3: Add the reusable Compatibility workflow**
+- [x] **Step 3: Add the reusable Compatibility workflow**
 
 Support `workflow_call`, `workflow_dispatch`, and a weekly schedule. Use a setup
 job to emit the JSON matrix. Each matrix job installs the declared Java major
@@ -781,13 +782,13 @@ Upload only `compatibility.json`. Do not upload the reference workspace. Use a
 cache key that includes version, side, mapping-tool hashes, and Vineflower
 version. Set per-job timeouts and `fail-fast: false`.
 
-- [ ] **Step 4: Gate releases and normal CI**
+- [x] **Step 4: Gate releases and normal CI**
 
 Keep normal CI network-light and add the generated README check through
 `task verify`. Call the reusable Compatibility workflow from `release.yml` and
 make the publish job depend on both `verify` and `compatibility`.
 
-- [ ] **Step 5: Validate workflow syntax and local checks**
+- [x] **Step 5: Validate workflow syntax and local checks**
 
 Run:
 
@@ -809,14 +810,14 @@ README check, and snapshot build pass.
 - Produces: a tested `automation/minecraft-versions` pull request.
 - Consumes: `mcversionupdate`, the Compatibility workflow, `GITHUB_TOKEN`, and GitHub CLI.
 
-- [ ] **Step 1: Add discovery with read-only permissions**
+- [x] **Step 1: Add discovery with read-only permissions**
 
 Schedule the workflow once per week and allow manual dispatch. The discovery
 job uses `contents: read`, checks out `main`, installs Devbox, runs `task verify`,
 and writes `candidate.json`. If the candidate list is empty, write "No stable
 family updates" to the job summary and stop.
 
-- [ ] **Step 2: Test changed candidates before any push**
+- [x] **Step 2: Test changed candidates before any push**
 
 Build a dynamic matrix from `mcversionupdate matrix --config candidate.json`.
 Create a temporary configuration directory with candidate `versions.json` and
@@ -831,7 +832,7 @@ Minecraft VERSION requires Java MAJOR, but the configured JDK distribution does 
 Run both available sides with explicit `$JAVA_HOME/bin/java` and
 `$JAVA_HOME/bin/javap`. Download all candidate reports into the acceptance job.
 
-- [ ] **Step 3: Create and validate a staging commit**
+- [x] **Step 3: Create and validate a staging commit**
 
 The acceptance job runs `mcversionupdate accept`, regenerates README, runs
 `task verify`, and commits only generated catalog files. Push to
@@ -846,7 +847,7 @@ env:
   GH_TOKEN: ${{ github.token }}
 ```
 
-- [ ] **Step 4: Promote the tested commit and open a pull request**
+- [x] **Step 4: Promote the tested commit and open a pull request**
 
 After compatibility passes, move `automation/minecraft-versions` to the tested
 commit. Use `gh pr create` or `gh pr edit` with `pull-requests: write`. The body
@@ -857,14 +858,14 @@ If repository settings prohibit Actions from creating pull requests, fail with
 an instruction to enable "Allow GitHub Actions to create and approve pull
 requests." Do not request a PAT.
 
-- [ ] **Step 5: Add workflow safety tests and documentation**
+- [x] **Step 5: Add workflow safety tests and documentation**
 
 Extend `internal/buildcheck/reference_test.go` to assert SHA-pinned actions,
 least-privilege top-level permissions, no `pull_request_target`, no secret
 fallback, and no release command in the updater. Update provenance with the
 manifest URL, mapping sources, pinned commits, and update policy.
 
-- [ ] **Step 6: Run the updater in dry-run mode**
+- [x] **Step 6: Run the updater in dry-run mode**
 
 Run:
 
@@ -889,7 +890,7 @@ in output, and all local checks pass.
 - Produces: reviewed user documentation and release evidence.
 - Consumes: the accepted catalog, compatibility workflow, and existing release process.
 
-- [ ] **Step 1: Finish user-facing documentation**
+- [x] **Step 1: Finish user-facing documentation**
 
 Explain that the table lists one tested representative per stable family. State
 that 1.0 and 1.1 are client-only because Mojang metadata lacks server jars.
@@ -897,7 +898,7 @@ Keep the explicit `--java` and `--javap` examples and the `JAVA_HOME` plus
 `PATH` alternative. Explain that weekly automation opens a reviewed pull
 request only after compatibility passes.
 
-- [ ] **Step 2: Run every local quality gate**
+- [x] **Step 2: Run every local quality gate**
 
 Run:
 
@@ -911,13 +912,13 @@ git diff --check
 Expected: formatting, lint, secret scan, vulnerability scan, race tests, build,
 README generation, GoReleaser validation, and release snapshot all pass.
 
-- [ ] **Step 3: Run the complete compatibility workflow**
+- [x] **Step 3: Run the complete compatibility workflow**
 
 Push only when the user authorizes it. Dispatch Compatibility for the exact
 commit. Expected: every configured client and server job passes, with only 1.0
 and 1.1 lacking server jobs.
 
-- [ ] **Step 4: Review the final scope**
+- [x] **Step 4: Review the final scope**
 
 Inspect:
 
