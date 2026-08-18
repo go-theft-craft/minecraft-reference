@@ -201,3 +201,53 @@ func TestAnUnknownStateEncodingIsRejected(t *testing.T) {
 		t.Fatal("accepted a document with an unknown state encoding")
 	}
 }
+
+func TestFallingAndClimbableSurviveARoundTrip(t *testing.T) {
+	t.Parallel()
+
+	// Both facts are per block in every version measured so far, so they ride
+	// in the block record beside blocksMovement rather than in a state range.
+	// The round trip is what proves the field names in the tag match the ones
+	// ParseDocument accepts; DisallowUnknownFields turns a typo into a parse
+	// failure, but only if something parses what was marshalled.
+	document := blocks.Document{
+		Version:       "1.8.9",
+		Side:          "server",
+		StateEncoding: blocks.StateEncodingChunk47,
+		Blocks: []blocks.Block{
+			{ID: 13, Name: "minecraft:gravel", BlocksMovement: true, Falls: true},
+			{ID: 65, Name: "minecraft:ladder", Climbable: true},
+			{ID: 88, Name: "minecraft:soul_sand", BlocksMovement: true},
+		},
+	}
+
+	raw, err := document.MarshalCanonical()
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	parsed, err := blocks.ParseDocument(raw)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	byName := make(map[string]blocks.Block, len(parsed.Blocks))
+	for _, block := range parsed.Blocks {
+		byName[block.Name] = block
+	}
+
+	if !byName["minecraft:gravel"].Falls {
+		t.Error("gravel does not fall")
+	}
+	// The one case that says why this is measured instead of derived from the
+	// material: soul sand shares Material.sand with gravel and stays put.
+	if byName["minecraft:soul_sand"].Falls {
+		t.Error("soul sand falls")
+	}
+	if !byName["minecraft:ladder"].Climbable {
+		t.Error("a ladder is not climbable")
+	}
+	if byName["minecraft:gravel"].Climbable {
+		t.Error("gravel is climbable")
+	}
+}

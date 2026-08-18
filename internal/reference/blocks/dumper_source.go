@@ -13,6 +13,13 @@ package blocks
 // silently vanish. Everything it asks for is a public method: the material's
 // blocksMovement, which is the game's own answer to "can something walk into
 // this", and isFullCube, which separates a slab from a stone.
+//
+// Two more facts ride along, and both are class tests because this version
+// states them as classes and nowhere else. Falling is BlockFalling, which sand,
+// gravel, the anvil, and the dragon egg extend. Climbable is BlockLadder or
+// BlockVine, which is not a guess at what looks climbable but the pair
+// EntityLivingBase.isOnLadder names; 1.8.9 has no tag system, so the game
+// itself asks the question this way.
 const dumpBlocks18Source = `import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +33,10 @@ public final class DumpBlocks1_8 {
         Method getMaterial = blockClass.getMethod("getMaterial");
         Method blocksMovement = Class.forName("net.minecraft.block.material.Material")
             .getMethod("blocksMovement");
+
+        Class<?> fallingClass = Class.forName("net.minecraft.block.BlockFalling");
+        Class<?> ladderClass = Class.forName("net.minecraft.block.BlockLadder");
+        Class<?> vineClass = Class.forName("net.minecraft.block.BlockVine");
 
         Object registry = registry(blockClass);
         Method nameOf = registry.getClass().getMethod("getNameForObject", Object.class);
@@ -43,9 +54,13 @@ public final class DumpBlocks1_8 {
             int id = ((Integer) idFromBlock.invoke(null, block)).intValue();
             Object material = getMaterial.invoke(block);
             boolean blocks = ((Boolean) blocksMovement.invoke(material)).booleanValue();
+            boolean falls = fallingClass.isInstance(block);
+            boolean climbable = ladderClass.isInstance(block) || vineClass.isInstance(block);
             entries.add("{\"id\":" + id
                 + ",\"name\":\"" + escape(name.toString()) + "\""
-                + ",\"blocksMovement\":" + blocks + "}");
+                + ",\"blocksMovement\":" + blocks
+                + ",\"falls\":" + falls
+                + ",\"climbable\":" + climbable + "}");
         }
 
         StringBuilder out = new StringBuilder();

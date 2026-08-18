@@ -21,13 +21,36 @@ package blocks
 // legacySolid, computed once per state in initCache from that state's own
 // collision shape, with cobweb and bamboo saplings excluded by name in the
 // game's own code.
-const dumpBlocks261Source = `import java.io.PrintStream;
+//
+// It measures two more facts, both per block. Falling is FallingBlock, the
+// class sand, gravel, concrete powder, the anvil, and the dragon egg extend.
+//
+// Climbable is the awkward one, and it is read from the jar rather than from
+// the running game on purpose. This version answers it with BlockTags.CLIMBABLE,
+// and a tag is not something Bootstrap binds — tags arrive from a data pack on
+// a server reload, so a dumper that asked state.is(CLIMBABLE) after bootStrap
+// would get false for every block in the game and report a world with no
+// ladders in it. Standing a full reload up to bind one tag is a great deal of
+// machinery to answer a nine-entry question. So the dumper reads the tag's own
+// document out of the same jar the digest names, which is where the game reads
+// it from too, and refuses a nested tag reference rather than resolving one it
+// has never seen.
+const dumpBlocks261Source = `import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.FallingBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
 public final class DumpBlocks26_1 {
@@ -43,6 +66,8 @@ public final class DumpBlocks26_1 {
         // and calls initCache on every state, which is what computes the answer
         // being measured. Reading the registry without it finds it empty.
         Class.forName("net.minecraft.world.level.block.Blocks");
+
+        Set<String> climbable = readTag("/data/minecraft/tags/block/climbable.json");
 
         List<String> entries = new ArrayList<String>();
         for (Block block : BuiltInRegistries.BLOCK) {
@@ -92,10 +117,13 @@ public final class DumpBlocks26_1 {
                     .append(",\"blocksMovement\":").append(blocks).append('}');
             }
 
+            String key = BuiltInRegistries.BLOCK.getKey(block).toString();
             StringBuilder entry = new StringBuilder();
             entry.append("{\"id\":").append(BuiltInRegistries.BLOCK.getId(block))
-                .append(",\"name\":\"").append(escape(BuiltInRegistries.BLOCK.getKey(block).toString())).append('"')
+                .append(",\"name\":\"").append(escape(key)).append('"')
                 .append(",\"blocksMovement\":").append(base)
+                .append(",\"falls\":").append(block instanceof FallingBlock)
+                .append(",\"climbable\":").append(climbable.contains(key))
                 .append(",\"stateRange\":{\"from\":").append(minState)
                 .append(",\"to\":").append(maxState).append('}');
             if (exceptions.length() > 0) {
@@ -116,6 +144,37 @@ public final class DumpBlocks26_1 {
         document.append("]}");
         out.print(document);
         out.flush();
+    }
+
+    // readTag reads one block tag document out of the jar on the classpath.
+    //
+    // It refuses a nested tag reference instead of resolving one. The climbable
+    // tag has none today, and a version that gave it one would silently lose
+    // every block behind the reference if this quietly skipped it.
+    private static Set<String> readTag(String resource) throws Exception {
+        Set<String> values = new HashSet<String>();
+        InputStream stream = DumpBlocks26_1.class.getResourceAsStream(resource);
+        if (stream == null) {
+            throw new IllegalStateException("no tag document at " + resource);
+        }
+        try {
+            JsonObject document = JsonParser.parseReader(
+                new InputStreamReader(stream, StandardCharsets.UTF_8)).getAsJsonObject();
+            for (JsonElement value : document.getAsJsonArray("values")) {
+                String name = value.getAsString();
+                if (name.startsWith("#")) {
+                    throw new IllegalStateException(resource + " references tag " + name);
+                }
+                values.add(name);
+            }
+        } finally {
+            stream.close();
+        }
+        if (values.isEmpty()) {
+            throw new IllegalStateException(resource + " describes nothing");
+        }
+
+        return values;
     }
 
     private static String escape(String value) {

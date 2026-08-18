@@ -93,6 +93,44 @@ type Block struct {
 	// rather than a boolean, so it was neither used now nor sufficient later.
 	// A field in a published document is far harder to remove than to add.
 	BlocksMovement bool `json:"blocksMovement"`
+	// Falls reports that this block is pulled down when the block beneath it
+	// is removed, which is the fact a route that digs has to know before it
+	// digs.
+	//
+	// It is a class test — BlockFalling in 1.8.9, FallingBlock in 26.1.2 —
+	// because that is where the game hangs the behaviour, and it is the only
+	// answer either version states in one place. Material will not substitute:
+	// soul sand shares Material.sand with gravel and does not fall, which is
+	// the whole reason this is measured rather than derived.
+	//
+	// It is a class test and therefore describes exactly what the class
+	// describes. 26.1.2 has one block that falls without extending it —
+	// pointed dripstone, which breaks and drops through its own tick — and it
+	// is reported here as not falling. Recording that is better than patching
+	// it: a hand-maintained exception list beside a measurement is a guess
+	// wearing the jar's hash, and the caller that needs dripstone can ask for
+	// a second measurement rather than trust an edited one.
+	//
+	// It is per block in both versions measured so far. Unlike BlocksMovement
+	// it hangs off the block rather than off one of its states, so it carries
+	// no range and no exception even under StateEncodingRegistry775.
+	Falls bool `json:"falls"`
+	// Climbable reports that a body can climb this block's column — a ladder,
+	// a vine, and in 26.1.2 seven more.
+	//
+	// Nothing in a collision shape says it. A ladder's box is empty, so a
+	// consumer reading shapes alone cannot tell one from air, which is why the
+	// fact is measured here rather than left to be inferred.
+	//
+	// The two versions state it in different places and both are read where
+	// the game reads them. 1.8.9 has no tag system and names the two blocks
+	// directly in EntityLivingBase.isOnLadder, so the dumper tests those two
+	// classes. 26.1.2 asks whether the state is in the climbable block tag,
+	// and that tag is a document in the jar rather than something a bootstrap
+	// binds, so the dumper reads it out of the same jar the digest names.
+	//
+	// Per block in both versions, for the same reason Falls is.
+	Climbable bool `json:"climbable"`
 	// StateRange is the span of state identifiers this block owns, for a
 	// version whose states are registry indices. It is absent for a version
 	// whose state identifier is arithmetic on the block identifier.
