@@ -436,3 +436,56 @@ func TestDownloadStopsRetryingOnCancelledContext(t *testing.T) {
 		t.Errorf("made %d requests, want 1", requests)
 	}
 }
+
+func TestDownloadReportsEachRetry(t *testing.T) {
+	payload := []byte("minecraft fixture")
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		requests++
+		if requests == 1 {
+			writer.Header().Set("Retry-After", "3")
+			writer.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = writer.Write(payload)
+	}))
+	defer server.Close()
+
+	var reported []string
+	var delays []time.Duration
+	digest := sha1.Sum(payload)
+	downloader := Downloader{
+		Client:   rewriteHostClient(t, server, "piston-data.mojang.com"),
+		Progress: func(message string) { reported = append(reported, message) },
+		sleep:    recordingSleeper(&delays),
+	}
+
+	if _, err := downloader.Download(context.Background(), DownloadSpec{URL: trustedFixtureURL, SHA1: fmt.Sprintf("%x", digest)}, filepath.Join(t.TempDir(), "artifact.bin")); err != nil {
+		t.Fatal(err)
+	}
+	if len(reported) != 1 {
+		t.Fatalf("reported %d retries, want 1: %v", len(reported), reported)
+	}
+	for _, want := range []string{"retry 2 of 5", "in 3s", "429"} {
+		if !strings.Contains(reported[0], want) {
+			t.Errorf("retry report %q does not mention %q", reported[0], want)
+		}
+	}
+}
+
+func TestDownloadReportsNothingWhenNoRetryIsNeeded(t *testing.T) {
+	payload := []byte("minecraft fixture")
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write(payload)
+	}))
+	defer server.Close()
+
+	digest := sha1.Sum(payload)
+	downloader := Downloader{
+		Client:   rewriteHostClient(t, server, "piston-data.mojang.com"),
+		Progress: func(message string) { t.Errorf("reported %q on a clean download", message) },
+	}
+	if _, err := downloader.Download(context.Background(), DownloadSpec{URL: trustedFixtureURL, SHA1: fmt.Sprintf("%x", digest)}, filepath.Join(t.TempDir(), "artifact.bin")); err != nil {
+		t.Fatal(err)
+	}
+}

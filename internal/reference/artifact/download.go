@@ -66,6 +66,10 @@ type DownloadResult struct {
 type Downloader struct {
 	Client *http.Client
 
+	// Progress reports each retry, so a throttled host leaves a trace in the
+	// log rather than showing up only as a slower run. A nil value stays quiet.
+	Progress func(string)
+
 	// sleep waits out a retry delay. Tests replace it to avoid real waiting.
 	sleep func(context.Context, time.Duration) error
 }
@@ -159,11 +163,12 @@ func (d Downloader) fetch(ctx context.Context, spec DownloadSpec, temporary *os.
 		if attempt == maxDownloadAttempts {
 			return fmt.Errorf("after %d attempts: %w", attempt, err)
 		}
-		pause := delay
+		pause := min(delay, maxRetryDelay)
 		if retryable.after > 0 {
-			pause = retryable.after
+			pause = min(retryable.after, maxRetryDelay)
 		}
-		if err := d.wait(ctx, min(pause, maxRetryDelay)); err != nil {
+		d.report(fmt.Sprintf("retry %d of %d in %s: %v", attempt+1, maxDownloadAttempts, pause, err))
+		if err := d.wait(ctx, pause); err != nil {
 			return fmt.Errorf("download %s: %w", spec.URL, err)
 		}
 		delay = min(delay*2, maxRetryDelay)
@@ -246,6 +251,12 @@ func retryAfter(response *http.Response) time.Duration {
 		}
 	}
 	return 0
+}
+
+func (d Downloader) report(message string) {
+	if d.Progress != nil {
+		d.Progress(message)
+	}
 }
 
 func (d Downloader) wait(ctx context.Context, delay time.Duration) error {

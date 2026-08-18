@@ -121,7 +121,10 @@ func Prepare(ctx context.Context, options Options) (resultErr error) {
 	java := toolchain.javaPath
 	javap := toolchain.javapPath
 	progress(options, fmt.Sprintf("preflight java=%d javap=%d required=%d", toolchain.javaMajor, toolchain.javapMajor, requiredJava))
-	downloader := artifact.Downloader{Client: options.HTTPClient}
+	downloader := artifact.Downloader{
+		Client:   options.HTTPClient,
+		Progress: func(message string) { progress(options, message) },
+	}
 	resolver := artifact.Resolver{Client: options.HTTPClient}
 
 	for _, version := range selectedVersions {
