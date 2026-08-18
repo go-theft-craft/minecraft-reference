@@ -55,10 +55,79 @@ widens the constant to meet the motion and the product is formed at double
 width. This is the shape 1.8.9 uses too, and it is the opposite of what a
 "compute at single width" reading would produce.
 
+## item
+
+Recorded 2026-08-18 for M9.2, from `net/minecraft/world/entity/item/ItemEntity`
+and confirmed in `javap -p -c` over the shipped jar.
+
+- **Gravity: `0.04`** — `getDefaultGravity` at `ItemEntity:112`. Confirmed in
+  bytecode: `ldc2_w double 0.04d`, so it is a `double` and the value is exactly
+  0.04. **1.8.9's is `0.04F` = `0.03999999910593033`**, a `float` subtracted from
+  `motionY` at `EntityItem:117`. The two games do not fall at the same rate, and
+  a consumer that carried one number for both would be wrong from the first
+  tick.
+- **Horizontal drag: `0.98F` = `0.9800000190734863`** — `ItemEntity:152`, and
+  multiplied by the block's own friction at `:154` when the item is on the
+  ground. Confirmed in bytecode: `ldc_w float 0.98f`, and at `:154`
+  `Block.getFriction:()F` followed by `ldc_w float 0.98f` and `fmul`, so the
+  friction product is formed at single width and widened once with `f2d` where
+  it enters `Vec3.multiply`.
+- **Vertical drag: `0.98`** — `ItemEntity:157`, the middle argument of
+  `multiply(friction, 0.98, friction)`. Confirmed in bytecode: `ldc2_w double
+  0.98d`. **This is the one that changed width.** 1.8.9 multiplies `motionY` by
+  the `float` `0.98F` = `0.9800000190734863`; 26.1.2 multiplies by the `double`
+  0.98 exactly. The horizontal drag stayed a `float` in the same statement, so
+  the two axes now carry different numbers where 1.8.9 carried one.
+- **Bounce: `-0.5`** — `ItemEntity:161`, `multiply(1.0, -0.5, 1.0)`. Confirmed in
+  bytecode: `ldc2_w double -0.5d`. **The condition differs from 1.8.9's.** Here
+  it applies on the ground *and only when the vertical motion is negative*
+  (`:160`); 1.8.9 applies it whenever the item is on the ground
+  (`EntityItem:146`), so a 1.8.9 item that is on the ground with upward motion
+  has that motion halved and inverted.
+- **Step height: `0.0`** — `Entity.maxUpStep` at `Entity:3835` returns `0.0F` and
+  `ItemEntity` does not override it.
+
+The tick order, which is as much a part of the value as the numbers:
+`applyGravity` at `:135`, then `move` at `:149`, then the two drags at `:157`,
+then the bounce at `:161`. 1.8.9's is the same shape — `motionY -= 0.04F`,
+`moveEntity`, drags, bounce — so only the widths and the bounce condition
+separate them.
+
+One thing recorded because it is a trap rather than a constant: an item reads the
+block below it through `getBlockPosBelowThatAffectsMyMovement`, which it
+overrides at `:194` to `getOnPos(0.999999F)`. `Entity`'s own version at `:989`
+uses `getOnPos(0.500001F)`. An item standing on the edge of a block can therefore
+take its friction from a different block than a player in the same place would.
+
+## arrow
+
+From `net/minecraft/world/entity/projectile/arrow/AbstractArrow`, same date, same
+two readings.
+
+- **Gravity: `0.05`** — `getDefaultGravity` at `AbstractArrow:339`. Confirmed in
+  bytecode: `ldc2_w double 0.05d`. **1.8.9's is `0.05F` =
+  `0.05000000074505806`**, the same widening difference the item has.
+- **Inertia: `0.99F` = `0.9900000095367432`** — `AbstractArrow:263`, through
+  `applyInertia`, which is `Vec3.scale` over all three axes at `:315-317`.
+  Confirmed in bytecode: `ldc_w float 0.99f` at the call site, and `f2d` before
+  `Vec3.scale:(D)`, so the constant is widened once and the product is formed at
+  double width. It replaces 1.8.9's separate horizontal and vertical multipliers,
+  which are the same number.
+- **Water inertia: `0.6F`** — `getWaterInertia` at `:1960` in the dump, `ldc_w
+  float 0.6f`. Out of M9.2's scope and recorded here so the next stage does not
+  have to find it again.
+- **Step height: `0.0`** — inherited, as the item's is.
+
+The tick order differs from the item's, and from 1.8.9's arrow. An arrow that is
+in the ground does no motion at all: the `isInGround` branch at `:202` ticks
+despawn and nothing else, which is why a capture of a landed arrow is a long run
+of zero deltas. Otherwise the order is move at `:255`, then inertia at `:263`,
+then gravity at `:267` — the reverse of the item's, which applies gravity first.
+
 ## What is not here, and why
 
-Item and arrow constants are not recorded. This milestone is the player on land,
-and a constant transcribed without a use is a constant nobody checks.
+Water, lava, and bubble columns, for either family. Both versions branch to a
+different tick there and no milestone before M9.5 needs it.
 
 ## The formulas around them differ from 1.8.9's
 
